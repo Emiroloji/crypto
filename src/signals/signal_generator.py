@@ -22,6 +22,14 @@ from src.analysis.statistical import (
     calculate_linear_regression, calculate_regression_score,
     detect_support_resistance, calculate_sr_score
 )
+from src.analysis.correlation import (
+    calculate_correlation_score, detect_divergence
+)
+from src.analysis.volatility import (
+    forecast_volatility_simple, calculate_volatility_score
+)
+from src.data.sentiment_client import sentiment_client
+from src.data.news_client import news_client
 from src.config.constants import SIGNAL_WEIGHTS
 from src.utils.logger import signal_logger
 from src.database.models import Signal, TradeDirection
@@ -106,6 +114,13 @@ class SignalGenerator:
             # Support/Resistance
             sr_levels = detect_support_resistance(df, lookback=100, num_levels=5)
             
+            # Volatility Forecasting
+            vol_forecast = forecast_volatility_simple(df, period=20, forecast_days=5)
+            
+            # Fear & Greed Index (sentiment)
+            fear_greed_data = sentiment_client.get_fear_greed_index()
+            fear_greed_value = fear_greed_data['value'] if fear_greed_data else None
+            
             # Determine preliminary direction for advanced scoring
             prelim_confidence = (
                 (trend_score / 100) * self.weights['trend_confirmation'] +
@@ -126,22 +141,40 @@ class SignalGenerator:
             regression_score = calculate_regression_score(current_price, regression, prelim_direction)
             sr_score = calculate_sr_score(current_price, sr_levels, prelim_direction)
             
-            # Combined advanced indicators score (average of all)
+            # Calculate correlation score (using demo correlation for now)
+            # In production, would fetch BTC data and calculate real correlation
+            demo_correlation = 0.5  # Neutral correlation for demo
+            correlation_score = calculate_correlation_score(demo_correlation, prelim_direction)
+            
+            # Calculate volatility score
+            volatility_forecast_score = calculate_volatility_score(vol_forecast, prelim_direction)
+            
+            # Calculate sentiment score from Fear & Greed
+            sentiment_fg_score = sentiment_client.calculate_sentiment_score(fear_greed_value, prelim_direction)
+            
+            # Calculate news sentiment score
+            news_sentiment_score = news_client.calculate_news_sentiment_score(symbol.split('/')[0], prelim_direction)
+            
+            # Combined advanced indicators score (average of all 6)
             advanced_score = (fib_score + adx_score + stoch_rsi_score + obv_score + vwap_score + ichimoku_score) / 6
             
-            # Combined mathematical models score
-            math_score = (regression_score + sr_score) / 2
+            # Combined mathematical models score (average of 4)
+            math_score = (regression_score + sr_score + correlation_score + volatility_forecast_score) / 4
             
-            # Calculate weighted confidence score with all components
+            # Combined sentiment score (Fear & Greed 60% + News 40%)
+            combined_sentiment = (sentiment_fg_score * 0.6 + news_sentiment_score * 0.4)
+            
+            # Calculate weighted confidence score with ALL components
             confidence_score = (
-                (trend_score / 100) * self.weights['trend_confirmation'] +
-                (momentum_score / 100) * self.weights['momentum_alignment'] +
-                (volume_score / 100) * self.weights['volume_confirmation'] +
-                (orderbook_score / 100) * self.weights['order_book_imbalance'] +
-                (volatility_score / 100) * self.weights['volatility_regime'] +
-                (advanced_score / 100) * 0.10 +  # 10% weight for advanced indicators
-                (math_score / 100) * 0.05 +  # 5% weight for mathematical models
-                (sentiment_score / 100) * self.weights['sentiment_score'] +
+                (trend_score / 100) * 0.25 +           # 25% - Trend confirmation
+                (momentum_score / 100) * 0.20 +        # 20% - Momentum alignment
+                (volume_score / 100) * 0.15 +          # 15% - Volume confirmation
+                (orderbook_score / 100) * 0.10 +       # 10% - Order book imbalance
+                (volatility_score / 100) * 0.10 +      # 10% - Volatility regime
+                (advanced_score / 100) * 0.10 +        # 10% - Advanced indicators (6)
+                (math_score / 100) * 0.08 +            # 8% - Mathematical models (4)
+                (combined_sentiment / 100) * 0.07 +    # 7% - Sentiment (F&G + News)
+                (sentiment_score / 100) * 0.00 +       # 0% - Legacy sentiment (unused)
                 (onchain_score / 100) * self.weights['onchain_data']
             ) * 100
             
