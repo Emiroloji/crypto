@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     # Exchange API Keys
     binance_api_key: str = Field(default="", description="Binance API key")
     binance_api_secret: str = Field(default="", description="Binance API secret")
+    binance_testnet: bool = Field(default=False, description="Use Binance testnet")
     bybit_api_key: str = Field(default="", description="Bybit API key")
     bybit_api_secret: str = Field(default="", description="Bybit API secret")
     

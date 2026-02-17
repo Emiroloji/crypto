@@ -105,7 +105,7 @@ class AlertManager:
     
     async def send_signal_alert(self, signal_data: dict) -> bool:
         """
-        Send high-confidence signal alert
+        Send high-confidence signal alert with detailed analysis
         
         Args:
             signal_data: Signal information
@@ -113,15 +113,72 @@ class AlertManager:
         Returns:
             Success status
         """
+        # Extract data with defaults
+        symbol = signal_data.get('symbol', 'N/A')
+        direction = str(signal_data.get('direction', 'N/A')).replace('TradeDirection.', '')
+        confidence = signal_data.get('confidence_score', signal_data.get('confidence', 0))
+        rr_ratio = signal_data.get('risk_reward_ratio', signal_data.get('risk_reward', 0))
+        signal_type = signal_data.get('signal_type', 'N/A')
+        
+        # Price levels
+        entry = signal_data.get('entry_price', 0)
+        stop_loss = signal_data.get('stop_loss', 0)
+        take_profit = signal_data.get('take_profit', 0)
+        
+        # Technical scores
+        trend_score = signal_data.get('trend_score', 0)
+        momentum_score = signal_data.get('momentum_score', 0)
+        volume_score = signal_data.get('volume_score', 0)
+        
+        # Calculate risk/reward percentages
+        if entry > 0:
+            risk_pct = abs((stop_loss - entry) / entry * 100)
+            reward_pct = abs((take_profit - entry) / entry * 100)
+        else:
+            risk_pct = reward_pct = 0
+        
+        # Direction emoji
+        dir_emoji = "🟢" if "LONG" in direction else "🔴"
+        
+        # Confidence stars
+        stars = "⭐" * min(5, int(confidence / 20))
+        
         message = (
-            f"📊 *High Confidence Signal*\n\n"
-            f"Symbol: {signal_data.get('symbol')}\n"
-            f"Direction: {signal_data.get('direction')}\n"
-            f"Confidence: {signal_data.get('confidence'):.1f}%\n"
-            f"R/R: 1:{signal_data.get('risk_reward', 0):.2f}\n"
-            f"Type: {signal_data.get('signal_type', 'N/A')}"
+            f"🚨 *YÜKSEK GÜVENİLİRLİK SİNYALİ*\n"
+            f"{'━' * 30}\n\n"
+            
+            f"📊 *GENEL BİLGİ*\n"
+            f"Symbol: *{symbol}*\n"
+            f"Yön: *{direction}* {dir_emoji}\n"
+            f"Confidence: *{confidence:.1f}%* {stars}\n"
+            f"Risk/Reward: *1:{rr_ratio:.2f}*\n"
+            f"Sinyal Tipi: _{signal_type}_\n\n"
+            
+            f"💰 *FİYAT SEVİYELERİ*\n"
+            f"Entry: `${entry:.2f}`\n"
+            f"Stop Loss: `${stop_loss:.2f}` (-{risk_pct:.1f}%)\n"
+            f"Take Profit: `${take_profit:.2f}` (+{reward_pct:.1f}%)\n\n"
+            
+            f"📈 *TEKNİK ANALİZ*\n"
+            f"Trend: {trend_score:.0f}/100 {'✅' if trend_score > 70 else '⚠️'}\n"
+            f"Momentum: {momentum_score:.0f}/100 {'✅' if momentum_score > 70 else '⚠️'}\n"
+            f"Volume: {volume_score:.0f}/100 {'✅' if volume_score > 70 else '⚠️'}\n\n"
+            
+            f"🎯 *ÖNERİ*\n"
+            f"• Pozisyon: 1-2% sermaye\n"
+            f"• Giriş: Limit order önerilir\n"
+            f"• Risk: {risk_pct:.1f}% | Hedef: {reward_pct:.1f}%\n\n"
+            
+            f"⚠️ *DİKKAT*\n"
+            f"• Stop loss'u mutlaka kullan\n"
+            f"• Pozisyon büyüklüğüne dikkat et\n"
+            f"• Haber akışını takip et\n\n"
+            
+            f"{'━' * 30}\n"
+            f"⏰ Manuel işlem önerilir"
         )
-        return await self.send_alert(message, "INFO")
+        
+        return await self.send_alert(message, "WARNING")
     
     async def send_risk_alert(self, alert_type: str, details: dict) -> bool:
         """

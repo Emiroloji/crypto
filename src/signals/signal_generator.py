@@ -8,6 +8,20 @@ from src.indicators.trend import get_trend_signals
 from src.indicators.momentum import get_momentum_signals
 from src.indicators.volatility import get_volatility_signals
 from src.indicators.volume import get_volume_signals
+from src.indicators.advanced import (
+    calculate_fibonacci_levels, calculate_fibonacci_score,
+    calculate_adx, calculate_adx_score,
+    calculate_stochastic_rsi, calculate_stochastic_rsi_score,
+    calculate_ichimoku_cloud, calculate_ichimoku_score
+)
+from src.indicators.volume_indicators import (
+    calculate_obv, calculate_obv_score,
+    calculate_vwap, calculate_vwap_score
+)
+from src.analysis.statistical import (
+    calculate_linear_regression, calculate_regression_score,
+    detect_support_resistance, calculate_sr_score
+)
 from src.config.constants import SIGNAL_WEIGHTS
 from src.utils.logger import signal_logger
 from src.database.models import Signal, TradeDirection
@@ -58,13 +72,75 @@ class SignalGenerator:
             orderbook_score = volume_signals['orderbook_imbalance_signal'] * 100
             volatility_score = volatility_signals['volatility_score']
             
-            # Calculate weighted confidence score
+            # Calculate advanced indicators
+            current_price = df['close'].iloc[-1]
+            
+            # Fibonacci levels
+            fib_levels = calculate_fibonacci_levels(df, lookback=50)
+            fib_score = calculate_fibonacci_score(current_price, fib_levels)
+            
+            # ADX (need direction first for scoring)
+            adx, di_plus, di_minus = calculate_adx(df, period=14)
+            adx_value = adx.iloc[-1] if len(adx) > 0 else 0
+            di_plus_value = di_plus.iloc[-1] if len(di_plus) > 0 else 0
+            di_minus_value = di_minus.iloc[-1] if len(di_minus) > 0 else 0
+            
+            # Stochastic RSI
+            stoch_k, stoch_d = calculate_stochastic_rsi(df, rsi_period=14, stoch_period=14)
+            stoch_k_value = stoch_k.iloc[-1] if len(stoch_k) > 0 else 50
+            stoch_d_value = stoch_d.iloc[-1] if len(stoch_d) > 0 else 50
+            
+            # OBV
+            obv = calculate_obv(df)
+            
+            # VWAP
+            vwap = calculate_vwap(df)
+            vwap_value = vwap.iloc[-1] if len(vwap) > 0 else current_price
+            
+            # Ichimoku Cloud
+            ichimoku = calculate_ichimoku_cloud(df)
+            
+            # Linear Regression
+            regression = calculate_linear_regression(df, period=50)
+            
+            # Support/Resistance
+            sr_levels = detect_support_resistance(df, lookback=100, num_levels=5)
+            
+            # Determine preliminary direction for advanced scoring
+            prelim_confidence = (
+                (trend_score / 100) * self.weights['trend_confirmation'] +
+                (momentum_score / 100) * self.weights['momentum_alignment'] +
+                (volume_score / 100) * self.weights['volume_confirmation']
+            ) * 100
+            
+            prelim_direction = 'LONG' if prelim_confidence > 0 else 'SHORT'
+            
+            # Calculate advanced indicator scores
+            adx_score = calculate_adx_score(adx_value, di_plus_value, di_minus_value, prelim_direction)
+            stoch_rsi_score = calculate_stochastic_rsi_score(stoch_k_value, stoch_d_value, prelim_direction)
+            obv_score = calculate_obv_score(df, obv, prelim_direction)
+            vwap_score = calculate_vwap_score(current_price, vwap_value, prelim_direction)
+            ichimoku_score = calculate_ichimoku_score(current_price, ichimoku, prelim_direction)
+            
+            # Calculate mathematical model scores
+            regression_score = calculate_regression_score(current_price, regression, prelim_direction)
+            sr_score = calculate_sr_score(current_price, sr_levels, prelim_direction)
+            
+            # Combined advanced indicators score (average of all)
+            advanced_score = (fib_score + adx_score + stoch_rsi_score + obv_score + vwap_score + ichimoku_score) / 6
+            
+            # Combined mathematical models score
+            math_score = (regression_score + sr_score) / 2
+            
+            # Calculate weighted confidence score with all components
             confidence_score = (
                 (trend_score / 100) * self.weights['trend_confirmation'] +
                 (momentum_score / 100) * self.weights['momentum_alignment'] +
                 (volume_score / 100) * self.weights['volume_confirmation'] +
                 (orderbook_score / 100) * self.weights['order_book_imbalance'] +
                 (volatility_score / 100) * self.weights['volatility_regime'] +
+                (advanced_score / 100) * 0.10 +  # 10% weight for advanced indicators
+                (math_score / 100) * 0.05 +  # 5% weight for mathematical models
                 (sentiment_score / 100) * self.weights['sentiment_score'] +
                 (onchain_score / 100) * self.weights['onchain_data']
             ) * 100
