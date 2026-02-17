@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signals - Crypto Trading Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+        <div class="logo">
+            <h2>🚀 Crypto Bot</h2>
+        </div>
+        <ul class="nav-menu">
+            <li><a href="index.html" class="nav-link">
+                    <span class="icon">📊</span>
+                    <span>Overview</span>
+                </a></li>
+            <li><a href="signals.html" class="nav-link active">
+                    <span class="icon">⚡</span>
+                    <span>Signals</span>
+                </a></li>
+            <li><a href="positions.html" class="nav-link">
+                    <span class="icon">📍</span>
+                    <span>Positions</span>
+                </a></li>
+            <li><a href="settings.html" class="nav-link">
+                    <span class="icon">⚙️</span>
+                    <span>Settings</span>
+                </a></li>
+        </ul>
+        <div class="sidebar-footer">
+            <div class="status-indicator">
+                <span class="status-dot" id="botStatus"></span>
+                <span id="botStatusText">Stopped</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="page-header">
+            <div>
+                <h1>⚡ Trading Signals</h1>
+                <p class="subtitle">All generated trading signals with confidence scores</p>
+            </div>
+            <div class="header-actions">
+                <button class="btn" onclick="loadPageData()">🔄 Refresh</button>
+            </div>
+        </header>
+
+        <!-- Filters -->
+        <div class="card">
+            <div class="card-header">
+                <h3>🔍 Filters</h3>
+            </div>
+            <div class="card-body">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Min Confidence:</span>
+                        <select id="minConfidence" onchange="loadPageData()"
+                            style="background: rgba(255,255,255,0.1); border: 1px solid var(--border); color: white; padding: 5px 10px; border-radius: 5px;">
+                            <option value="0">All</option>
+                            <option value="50">50%+</option>
+                            <option value="70">70%+</option>
+                            <option value="85" selected>85%+</option>
+                        </select>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Direction:</span>
+                        <select id="direction" onchange="loadPageData()"
+                            style="background: rgba(255,255,255,0.1); border: 1px solid var(--border); color: white; padding: 5px 10px; border-radius: 5px;">
+                            <option value="all">All</option>
+                            <option value="LONG">LONG</option>
+                            <option value="SHORT">SHORT</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Signals Table -->
+        <div class="card">
+            <div class="card-header">
+                <h3>📋 All Signals</h3>
+                <span id="signalCount" class="badge badge-info">0 signals</span>
+            </div>
+            <div class="card-body">
+                <div id="signalsTable">
+                    <div class="loading">Loading signals...</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        async function loadPageData() {
+            await loadStatus();
+            await loadSignals();
+        }
+
+        async function loadSignals() {
+            const signals = await fetchAPI('/signals?limit=50');
+            const container = document.getElementById('signalsTable');
+            const countEl = document.getElementById('signalCount');
+
+            if (!signals || signals.length === 0) {
+                container.innerHTML = '<div class="empty-state">No signals found</div>';
+                countEl.textContent = '0 signals';
+                return;
+            }
+
+            // Apply filters
+            const minConf = parseFloat(document.getElementById('minConfidence').value);
+            const dir = document.getElementById('direction').value;
+
+            let filtered = signals.filter(s => s.confidence_score >= minConf);
+            if (dir !== 'all') {
+                filtered = filtered.filter(s => s.direction === dir);
+            }
+
+            countEl.textContent = `${filtered.length} signals`;
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="empty-state">No signals match filters</div>';
+                return;
+            }
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Direction</th>
+                            <th>Type</th>
+                            <th>Confidence</th>
+                            <th>R/R Ratio</th>
+                            <th>Entry</th>
+                            <th>Stop Loss</th>
+                            <th>Take Profit</th>
+                            <th>Status</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            filtered.forEach(signal => {
+                const dirEmoji = signal.direction === 'LONG' ? '🟢' : signal.direction === 'SHORT' ? '🔴' : '⚪';
+                const confClass = signal.confidence_score >= 85 ? 'positive' : signal.confidence_score >= 70 ? '' : 'negative';
+                const statusEmoji = signal.executed ? '✅' : '⏳';
+
+                html += `
+                    <tr>
+                        <td><strong>${signal.symbol}</strong></td>
+                        <td>${dirEmoji} ${signal.direction || 'NEUTRAL'}</td>
+                        <td>${signal.signal_type}</td>
+                        <td class="${confClass}"><strong>${signal.confidence_score.toFixed(1)}%</strong></td>
+                        <td>1:${signal.risk_reward_ratio.toFixed(2)}</td>
+                        <td>$${signal.entry_price ? signal.entry_price.toFixed(2) : '-'}</td>
+                        <td>$${signal.stop_loss ? signal.stop_loss.toFixed(2) : '-'}</td>
+                        <td>$${signal.take_profit ? signal.take_profit.toFixed(2) : '-'}</td>
+                        <td>${statusEmoji} ${signal.executed ? 'Executed' : 'Pending'}</td>
+                        <td>${formatDate(signal.created_at)}</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        // Initial load
+        loadPageData();
+        setInterval(loadPageData, 15000);
+    </script>
+</body>
+
+</html>

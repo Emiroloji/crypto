@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Positions - Crypto Trading Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+        <div class="logo">
+            <h2>🚀 Crypto Bot</h2>
+        </div>
+        <ul class="nav-menu">
+            <li><a href="index.html" class="nav-link">
+                    <span class="icon">📊</span>
+                    <span>Overview</span>
+                </a></li>
+            <li><a href="signals.html" class="nav-link">
+                    <span class="icon">⚡</span>
+                    <span>Signals</span>
+                </a></li>
+            <li><a href="positions.html" class="nav-link active">
+                    <span class="icon">📍</span>
+                    <span>Positions</span>
+                </a></li>
+            <li><a href="settings.html" class="nav-link">
+                    <span class="icon">⚙️</span>
+                    <span>Settings</span>
+                </a></li>
+        </ul>
+        <div class="sidebar-footer">
+            <div class="status-indicator">
+                <span class="status-dot" id="botStatus"></span>
+                <span id="botStatusText">Stopped</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="page-header">
+            <div>
+                <h1>📍 Positions & Trades</h1>
+                <p class="subtitle">Active positions and trading history</p>
+            </div>
+            <div class="header-actions">
+                <button class="btn" onclick="loadPageData()">🔄 Refresh</button>
+            </div>
+        </header>
+
+        <!-- Open Positions -->
+        <div class="card">
+            <div class="card-header">
+                <h3>📍 Open Positions</h3>
+                <span id="positionCount" class="badge badge-info">0 positions</span>
+            </div>
+            <div class="card-body">
+                <div id="positionsTable">
+                    <div class="loading">Loading positions...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Trades -->
+        <div class="card">
+            <div class="card-header">
+                <h3>📜 Trading History</h3>
+                <span id="tradeCount" class="badge badge-info">0 trades</span>
+            </div>
+            <div class="card-body">
+                <div id="tradesTable">
+                    <div class="loading">Loading trades...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Performance Stats -->
+        <div class="card">
+            <div class="card-header">
+                <h3>📈 Performance Statistics</h3>
+            </div>
+            <div class="card-body">
+                <div class="info-grid" id="performanceStats">
+                    <div class="loading">Loading stats...</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        async function loadPageData() {
+            await loadStatus();
+            await loadPositions();
+            await loadTrades();
+        }
+
+        async function loadPositions() {
+            const positions = await fetchAPI('/positions');
+            const container = document.getElementById('positionsTable');
+            const countEl = document.getElementById('positionCount');
+
+            if (!positions || positions.length === 0) {
+                container.innerHTML = '<div class="empty-state">No open positions</div>';
+                countEl.textContent = '0 positions';
+                return;
+            }
+
+            countEl.textContent = `${positions.length} positions`;
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Direction</th>
+                            <th>Entry Price</th>
+                            <th>Current Price</th>
+                            <th>P&L</th>
+                            <th>P&L %</th>
+                            <th>Stop Loss</th>
+                            <th>Take Profit</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            positions.forEach(pos => {
+                const pnlClass = pos.unrealized_pnl >= 0 ? 'positive' : 'negative';
+                const pnlPct = ((pos.current_price - pos.entry_price) / pos.entry_price * 100);
+
+                html += `
+                    <tr>
+                        <td><strong>${pos.symbol}</strong></td>
+                        <td>${pos.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT'}</td>
+                        <td>$${pos.entry_price.toFixed(2)}</td>
+                        <td>$${pos.current_price.toFixed(2)}</td>
+                        <td class="${pnlClass}"><strong>$${pos.unrealized_pnl.toFixed(2)}</strong></td>
+                        <td class="${pnlClass}">${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%</td>
+                        <td>$${pos.stop_loss.toFixed(2)}</td>
+                        <td>$${pos.take_profit ? pos.take_profit.toFixed(2) : '-'}</td>
+                        <td><button class="btn btn-danger btn-small" onclick="closePosition('${pos.symbol}')">Close</button></td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        async function loadTrades() {
+            const trades = await fetchAPI('/trades?limit=30');
+            const container = document.getElementById('tradesTable');
+            const countEl = document.getElementById('tradeCount');
+            const statsEl = document.getElementById('performanceStats');
+
+            if (!trades || trades.length === 0) {
+                container.innerHTML = '<div class="empty-state">No trades yet</div>';
+                countEl.textContent = '0 trades';
+                statsEl.innerHTML = '<div class="empty-state">No data</div>';
+                return;
+            }
+
+            countEl.textContent = `${trades.length} trades`;
+
+            // Calculate stats
+            const closedTrades = trades.filter(t => t.status === 'CLOSED' && t.pnl !== null);
+            const winningTrades = closedTrades.filter(t => t.pnl > 0);
+            const losingTrades = closedTrades.filter(t => t.pnl < 0);
+            const totalPnL = closedTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
+            const winRate = closedTrades.length > 0 ? (winningTrades.length / closedTrades.length * 100).toFixed(1) : 0;
+            const avgWin = winningTrades.length > 0 ? (winningTrades.reduce((sum, t) => sum + t.pnl, 0) / winningTrades.length).toFixed(2) : 0;
+            const avgLoss = losingTrades.length > 0 ? (losingTrades.reduce((sum, t) => sum + t.pnl, 0) / losingTrades.length).toFixed(2) : 0;
+
+            // Display stats
+            const pnlClass = totalPnL >= 0 ? 'positive' : 'negative';
+            statsEl.innerHTML = `
+                <div class="info-item">
+                    <span class="info-label">Total P&L:</span>
+                    <span class="info-value ${pnlClass}">$${totalPnL.toFixed(2)}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Win Rate:</span>
+                    <span class="info-value">${winRate}%</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Winning Trades:</span>
+                    <span class="info-value positive">${winningTrades.length}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Losing Trades:</span>
+                    <span class="info-value negative">${losingTrades.length}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Avg Win:</span>
+                    <span class="info-value positive">$${avgWin}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Avg Loss:</span>
+                    <span class="info-value negative">$${avgLoss}</span>
+                </div>
+            `;
+
+            // Display trades table
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Direction</th>
+                            <th>Status</th>
+                            <th>Entry</th>
+                            <th>Exit</th>
+                            <th>P&L</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            trades.forEach(trade => {
+                const pnlClass = trade.pnl && trade.pnl >= 0 ? 'positive' : 'negative';
+                const statusEmoji = trade.status === 'CLOSED' ? '✅' : '⏳';
+
+                html += `
+                    <tr>
+                        <td><strong>${trade.symbol}</strong></td>
+                        <td>${trade.direction === 'LONG' ? '🟢' : '🔴'} ${trade.direction}</td>
+                        <td>${statusEmoji} ${trade.status}</td>
+                        <td>$${trade.entry_price.toFixed(2)}</td>
+                        <td>${trade.exit_price ? '$' + trade.exit_price.toFixed(2) : '-'}</td>
+                        <td class="${pnlClass}"><strong>${trade.pnl ? '$' + trade.pnl.toFixed(2) : '-'}</strong></td>
+                        <td>${formatDate(trade.created_at)}</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        async function closePosition(symbol) {
+            if (!confirm(`Close position for ${symbol}?`)) {
+                return;
+            }
+
+            const data = await fetchAPI(`/positions/${symbol}/close`, { method: 'POST' });
+            if (data) {
+                showToast(`Position ${symbol} closed!`, 'success');
+                loadPageData();
+            }
+        }
+
+        // Initial load
+        loadPageData();
+        setInterval(loadPageData, 10000);
+    </script>
+</body>
+
+</html>

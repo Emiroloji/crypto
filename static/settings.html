@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Crypto Trading Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+        <div class="logo">
+            <h2>🚀 Crypto Bot</h2>
+        </div>
+        <ul class="nav-menu">
+            <li><a href="index.html" class="nav-link">
+                    <span class="icon">📊</span>
+                    <span>Overview</span>
+                </a></li>
+            <li><a href="signals.html" class="nav-link">
+                    <span class="icon">⚡</span>
+                    <span>Signals</span>
+                </a></li>
+            <li><a href="positions.html" class="nav-link">
+                    <span class="icon">📍</span>
+                    <span>Positions</span>
+                </a></li>
+            <li><a href="settings.html" class="nav-link active">
+                    <span class="icon">⚙️</span>
+                    <span>Settings</span>
+                </a></li>
+        </ul>
+        <div class="sidebar-footer">
+            <div class="status-indicator">
+                <span class="status-dot" id="botStatus"></span>
+                <span id="botStatusText">Stopped</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="page-header">
+            <div>
+                <h1>⚙️ System Settings</h1>
+                <p class="subtitle">Bot configuration and system information</p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-warning" onclick="toggleKillSwitch()">🛑 Kill-Switch</button>
+                <button class="btn" onclick="loadPageData()">🔄 Refresh</button>
+            </div>
+        </header>
+
+        <!-- Trading Configuration -->
+        <div class="card">
+            <div class="card-header">
+                <h3>📊 Trading Configuration</h3>
+            </div>
+            <div class="card-body">
+                <div class="info-grid" id="tradingConfig">
+                    <div class="loading">Loading configuration...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Risk Management -->
+        <div class="card">
+            <div class="card-header">
+                <h3>🛡️ Risk Management</h3>
+            </div>
+            <div class="card-body">
+                <div class="info-grid" id="riskConfig">
+                    <div class="loading">Loading risk settings...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Features -->
+        <div class="card">
+            <div class="card-header">
+                <h3>🚀 System Features</h3>
+            </div>
+            <div class="card-body">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Total Indicators:</span>
+                        <span class="info-value positive">22+</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Advanced Indicators:</span>
+                        <span class="info-value">6 (Fibonacci, ADX, Stoch RSI, OBV, VWAP, Ichimoku)</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Mathematical Models:</span>
+                        <span class="info-value">4 (Regression, S/R, Correlation, Volatility)</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Sentiment Analysis:</span>
+                        <span class="info-value">2 (Fear & Greed + News)</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Scoring Categories:</span>
+                        <span class="info-value">11 factors</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Market Data:</span>
+                        <span class="info-value positive">Real Binance API</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Indicator Weights -->
+        <div class="card">
+            <div class="card-header">
+                <h3>⚖️ Scoring Weights</h3>
+            </div>
+            <div class="card-body">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Trend Confirmation:</span>
+                        <span class="info-value">25%</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Momentum Alignment:</span>
+                        <span class="info-value">20%</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Volume Confirmation:</span>
+                        <span class="info-value">15%</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Order Book Imbalance:</span>
+                        <span class="info-value">10%</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Volatility Regime:</span>
+                        <span class="info-value">10%</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Advanced Indicators:</span>
+                        <span class="info-value positive">10%</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Mathematical Models:</span>
+                        <span class="info-value positive">8%</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Sentiment Analysis:</span>
+                        <span class="info-value positive">7%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- API Status -->
+        <div class="card">
+            <div class="card-header">
+                <h3>🔌 API Status</h3>
+            </div>
+            <div class="card-body">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Binance API:</span>
+                        <span class="info-value positive">✅ Connected</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Fear & Greed API:</span>
+                        <span class="info-value positive">✅ Active</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">News API:</span>
+                        <span class="info-value positive">✅ Active</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Telegram Alerts:</span>
+                        <span class="info-value positive">✅ Enabled</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        async function loadPageData() {
+            await loadStatus();
+            await loadConfig();
+        }
+
+        async function loadConfig() {
+            const config = await fetchAPI('/config');
+
+            if (!config) {
+                document.getElementById('tradingConfig').innerHTML = '<div class="empty-state">Failed to load configuration</div>';
+                document.getElementById('riskConfig').innerHTML = '<div class="empty-state">Failed to load risk settings</div>';
+                return;
+            }
+
+            // Trading Configuration
+            document.getElementById('tradingConfig').innerHTML = `
+                <div class="info-item">
+                    <span class="info-label">Trading Pairs:</span>
+                    <span class="info-value">${config.trading_pairs.join(', ')}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Timeframes:</span>
+                    <span class="info-value">${config.timeframes.join(', ')}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Paper Trading:</span>
+                    <span class="info-value ${config.paper_trading ? 'warning' : 'positive'}">${config.paper_trading ? '🎮 DEMO MODE' : '🔴 LIVE TRADING'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Confidence Threshold:</span>
+                    <span class="info-value positive">${config.confidence_threshold}%</span>
+                </div>
+            `;
+
+            // Risk Management
+            document.getElementById('riskConfig').innerHTML = `
+                <div class="info-item">
+                    <span class="info-label">Risk Per Trade:</span>
+                    <span class="info-value">${config.risk_per_trade_pct}%</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Max Daily Loss:</span>
+                    <span class="info-value">${config.max_daily_loss_pct}%</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Max Leverage:</span>
+                    <span class="info-value">${config.max_leverage}x</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Max Concurrent Trades:</span>
+                    <span class="info-value">${config.max_concurrent_trades}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Min R/R Ratio:</span>
+                    <span class="info-value">${config.min_risk_reward_ratio}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Stop Loss %:</span>
+                    <span class="info-value">${config.stop_loss_pct}%</span>
+                </div>
+            `;
+        }
+
+        async function toggleKillSwitch() {
+            const endpoint = killSwitchActive ? '/killswitch/deactivate' : '/killswitch/activate';
+            const data = await fetchAPI(endpoint, { method: 'POST' });
+
+            if (data) {
+                killSwitchActive = !killSwitchActive;
+                if (killSwitchActive) {
+                    showToast('Kill-switch activated! All trading stopped.', 'error');
+                } else {
+                    showToast('Kill-switch deactivated.', 'success');
+                }
+                loadPageData();
+            }
+        }
+
+        // Initial load
+        loadPageData();
+    </script>
+</body>
+
+</html>
