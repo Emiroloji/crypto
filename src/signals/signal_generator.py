@@ -112,21 +112,21 @@ class SignalGenerator:
                 'symbol': symbol,
                 'timestamp': datetime.utcnow(),
                 'direction': direction,
-                'trend_score': trend_score,
-                'momentum_score': momentum_score,
-                'volume_score': volume_score,
-                'orderbook_score': orderbook_score,
-                'volatility_score': volatility_score,
-                'sentiment_score': sentiment_score,
-                'onchain_score': onchain_score,
-                'confidence_score': abs(confidence_score),
-                'risk_reward_ratio': risk_reward_ratio,
-                'entry_price': entry_price,
-                'stop_loss': stop_loss,
-                'take_profit': take_profit,
+                'trend_score': float(trend_score),
+                'momentum_score': float(momentum_score),
+                'volume_score': float(volume_score),
+                'orderbook_score': float(orderbook_score),
+                'volatility_score': float(volatility_score),
+                'sentiment_score': float(sentiment_score),
+                'onchain_score': float(onchain_score),
+                'confidence_score': float(abs(confidence_score)),
+                'risk_reward_ratio': float(risk_reward_ratio),
+                'entry_price': float(entry_price),
+                'stop_loss': float(stop_loss),
+                'take_profit': float(take_profit),
                 'signal_type': signal_type,
                 'market_regime': volatility_regime,
-                'atr': atr,
+                'atr': float(atr),
             }
             
             signal_logger.info(
@@ -137,7 +137,9 @@ class SignalGenerator:
             return signal_data
             
         except Exception as e:
+            import traceback
             signal_logger.error(f"Error generating signal for {symbol}: {e}")
+            signal_logger.error(f"Traceback: {traceback.format_exc()}")
             return None
     
     def _determine_signal_type(

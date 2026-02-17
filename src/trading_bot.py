@@ -114,11 +114,21 @@ class TradingBot:
                 onchain_score=0.0,    # TODO: Integrate on-chain
             )
             
+            main_logger.info(f"Signal generated for {symbol}: {signal_data is not None}")
+            
             if not signal_data:
+                main_logger.info(f"No signal data returned for {symbol}")
                 return
+            
+            main_logger.info(
+                f"Signal details - Direction: {signal_data.get('direction')}, "
+                f"Confidence: {signal_data.get('confidence_score', 0):.1f}%"
+            )
             
             # Save signal
             signal_id = signal_generator.save_signal(signal_data)
+            main_logger.info(f"Signal save result for {symbol}: ID={signal_id}")
+            
             if signal_id:
                 signal_data['signal_id'] = signal_id
             

@@ -98,44 +98,31 @@ def detect_macd_divergence(df: pd.DataFrame, lookback: int = 20) -> dict:
     """
     macd_line, signal_line, histogram = calculate_macd(df)
     
-    # Find recent peaks and troughs
-    price_peaks = df['close'].rolling(window=5, center=True).apply(
-        lambda x: x[2] if x[2] == max(x) else 0
-    )
-    price_troughs = df['close'].rolling(window=5, center=True).apply(
-        lambda x: x[2] if x[2] == min(x) else 0
-    )
-    
-    macd_peaks = histogram.rolling(window=5, center=True).apply(
-        lambda x: x[2] if x[2] == max(x) else 0
-    )
-    macd_troughs = histogram.rolling(window=5, center=True).apply(
-        lambda x: x[2] if x[2] == min(x) else 0
-    )
-    
     # Bullish divergence: price makes lower low, MACD makes higher low
     bullish_divergence = False
     # Bearish divergence: price makes higher high, MACD makes lower high
     bearish_divergence = False
     
-    recent_data = df.tail(lookback)
-    
-    # Simplified divergence detection
-    if len(recent_data) > 10:
+    # Simplified divergence detection using trend comparison
+    if len(df) >= lookback:
+        recent_data = df.tail(lookback)
+        
         price_trend = recent_data['close'].iloc[-1] - recent_data['close'].iloc[0]
         macd_trend = histogram.iloc[-1] - histogram.iloc[-lookback]
         
+        # Bullish divergence: price declining but MACD rising
         if price_trend < 0 and macd_trend > 0:
             bullish_divergence = True
+        # Bearish divergence: price rising but MACD declining
         elif price_trend > 0 and macd_trend < 0:
             bearish_divergence = True
     
     return {
         'bullish_divergence': bullish_divergence,
         'bearish_divergence': bearish_divergence,
-        'macd_value': macd_line.iloc[-1],
-        'signal_value': signal_line.iloc[-1],
-        'histogram_value': histogram.iloc[-1],
+        'macd_value': macd_line.iloc[-1] if len(macd_line) > 0 else 0,
+        'signal_value': signal_line.iloc[-1] if len(signal_line) > 0 else 0,
+        'histogram_value': histogram.iloc[-1] if len(histogram) > 0 else 0,
     }
 
 
