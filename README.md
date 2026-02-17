@@ -1,300 +1,295 @@
-"""README for Advanced Crypto Intraday Trading System
+# 🚀 Advanced Crypto Intraday Trading System
 
-## Overview
+Gelişmiş yapay zeka destekli kripto para intraday trading sistemi. Demo modda çalışır, gerçek API anahtarları ile canlı veri çekebilir (paper trading).
 
-This is an AI-powered high-frequency cryptocurrency trading system designed for intraday trading (1m-15m timeframes). The system combines technical analysis, mathematical modeling, order flow analysis, sentiment analysis, and adaptive risk management.
+## ✨ Özellikler
 
-## ⚠️ WARNING
+### 📊 Teknik Analiz (20+ İndikatör)
+- **Trend**: EMA, VWAP, Supertrend, Ichimoku Cloud, ADX
+- **Momentum**: RSI, Stochastic RSI, MACD (divergence detection), CCI
+- **Volatilite**: ATR, Bollinger Bands (squeeze detection), Keltner Channels
+- **Hacim**: Volume Delta, CVD, Order Book Imbalance
 
-**This is a high-risk trading system. You can lose significant capital. Only use with funds you can afford to lose.**
+### 🎯 Sinyal Üretimi
+- Ağırlıklı skorlama sistemi (7 bileşen)
+- Güven skoru hesaplama (A/B/C/D derecelendirme)
+- Risk/Reward oranı analizi
+- Sinyal tipleri: Breakout, Pullback, Reversal, Continuation
 
-- Professional funds typically target 3-5% daily returns
-- Targeting 20%+ daily returns approaches gambling territory
-- Maximum drawdown risk is proportional to profit targets
-- Always start with paper trading mode
+### 🛡️ Risk Yönetimi
+- Kelly Criterion pozisyon boyutlandırma
+- ATR tabanlı stop loss
+- Trailing stop ve breakeven logic
+- Kill-switch (5% günlük kayıp)
+- Korelasyon takibi
+- Maksimum 3 eşzamanlı işlem
 
-## Features
+### 📈 Performans Takibi
+- Sharpe ve Sortino oranları
+- Drawdown takibi
+- Kazanma oranı analizi
+- Günlük performans metrikleri
 
-- **Multi-Exchange Support**: Binance Futures, Bybit
-- **Technical Analysis**: 20+ indicators (EMA, RSI, MACD, Bollinger Bands, etc.)
-- **Order Flow Analysis**: Order book imbalance, volume delta, CVD
-- **Sentiment Analysis**: Twitter, Reddit, Telegram, news aggregation
-- **On-Chain Analytics**: Whale tracking, exchange flows
-- **Risk Management**: Dynamic position sizing, ATR-based stops, kill-switch
-- **AI Learning**: Reinforcement learning, walk-forward optimization
-- **Real-Time Monitoring**: Prometheus + Grafana dashboards
-- **Alerts**: Telegram notifications for trades and risks
+### 🎨 Modern Dashboard
+- Real-time veri gösterimi
+- Dark mode tasarım
+- Otomatik yenileme (10 saniye)
+- Responsive tasarım
 
-## Quick Start
+## 🚀 Hızlı Başlangıç
 
-### 1. Prerequisites
-
-- Python 3.11+
-- Docker & Docker Compose
-- PostgreSQL 16
-- Redis 7
-
-### 2. Installation
+### 1. Kurulum
 
 ```bash
-# Clone repository
 cd /Users/emircanuysal/Desktop/crypto
+./setup.sh
+```
 
-# Create virtual environment
+Veya manuel kurulum:
+
+```bash
+# Virtual environment oluştur
 python3 -m venv venv
-source venv/bin/activate  # On macOS/Linux
+source venv/bin/activate
 
-# Install dependencies
+# Bağımlılıkları yükle
 pip install -r requirements.txt
-```
 
-### 3. Configuration
-
-```bash
-# Copy environment template
-cp .env.example .env
-
-# Edit .env with your API keys
-nano .env
-```
-
-**Required Configuration:**
-- Exchange API keys (Binance/Bybit)
-- Database URL
-- Telegram bot token (for alerts)
-- Social media API keys (optional)
-
-### 4. Database Setup
-
-```bash
-# Start PostgreSQL and Redis
+# Docker servislerini başlat
 docker-compose up -d postgres redis
 
-# Initialize database
-python -c "from src.database.connection import init_db; init_db()"
+# Veritabanını başlat
+python3 -c "from src.database.connection import init_db; init_db()"
 ```
 
-### 5. Run System
+### 2. Yapılandırma
+
+`.env` dosyasını düzenleyin:
 
 ```bash
-# Paper trading mode (recommended for testing)
-export ENABLE_PAPER_TRADING=true
-python -m src.api.main
+# Demo mod için (API anahtarı gerekmez)
+ENABLE_PAPER_TRADING=true
 
-# Production mode (use with caution)
-export ENABLE_PAPER_TRADING=false
-export ENVIRONMENT=production
-python -m src.api.main
+# Gerçek veri için (opsiyonel)
+BINANCE_API_KEY=your_api_key
+BINANCE_API_SECRET=your_api_secret
 ```
 
-### 6. Access Monitoring
+### 3. Çalıştırma
 
-- **API**: http://localhost:8000
-- **Grafana**: http://localhost:3000 (admin/admin)
+```bash
+source venv/bin/activate
+python main.py
+```
+
+### 4. Erişim
+
+- **Dashboard**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs
+- **Grafana**: http://localhost:3000
 - **Prometheus**: http://localhost:9090
 
-## Project Structure
+## 📁 Proje Yapısı
 
 ```
 crypto/
 ├── src/
-│   ├── api/              # FastAPI endpoints
-│   ├── config/           # Configuration & constants
-│   ├── data/             # Data collection & exchange clients
-│   ├── database/         # ORM models & connection
-│   ├── indicators/       # Technical indicators
-│   ├── models/           # Mathematical & statistical models
-│   ├── nlp/              # Sentiment analysis
-│   ├── signals/          # Signal generation & scoring
-│   ├── risk/             # Risk management
-│   ├── execution/        # Trade execution
-│   ├── ml/               # Machine learning
-│   ├── analytics/        # Performance metrics
-│   └── utils/            # Utilities (logging, cache, alerts)
-├── tests/                # Unit & integration tests
-├── logs/                 # Log files
-├── data/                 # Historical data
-├── models/               # Trained ML models
-├── docker-compose.yml    # Docker orchestration
-├── Dockerfile            # Container definition
-└── requirements.txt      # Python dependencies
+│   ├── config/          # Ayarlar ve sabitler
+│   ├── data/            # Exchange client ve veri yönetimi
+│   ├── database/        # ORM modelleri ve bağlantı
+│   ├── indicators/      # Teknik indikatörler
+│   ├── signals/         # Sinyal üretimi ve skorlama
+│   ├── risk/            # Risk yönetimi
+│   ├── execution/       # İşlem yürütme
+│   ├── analytics/       # Performans metrikleri
+│   ├── api/             # FastAPI uygulaması
+│   └── utils/           # Yardımcı araçlar
+├── static/              # Frontend dashboard
+├── monitoring/          # Prometheus/Grafana config
+├── main.py             # Ana giriş noktası
+├── docker-compose.yml  # Docker orchestration
+└── requirements.txt    # Python bağımlılıkları
 ```
 
-## Configuration
+## 🎯 Kullanım
 
-### Risk Parameters (`.env`)
+### API Endpoints
+
+| Endpoint | Method | Açıklama |
+|----------|--------|----------|
+| `/` | GET | Dashboard |
+| `/status` | GET | Sistem durumu |
+| `/bot/start` | POST | Botu başlat |
+| `/bot/stop` | POST | Botu durdur |
+| `/positions` | GET | Açık pozisyonlar |
+| `/trades` | GET | İşlem geçmişi |
+| `/signals` | GET | Son sinyaller |
+| `/performance` | GET | Performans metrikleri |
+
+### Örnek API Kullanımı
+
+```python
+import requests
+
+# Sistem durumunu kontrol et
+response = requests.get('http://localhost:8000/status')
+print(response.json())
+
+# Açık pozisyonları görüntüle
+positions = requests.get('http://localhost:8000/positions')
+print(positions.json())
+```
+
+## ⚙️ Yapılandırma
+
+### Risk Parametreleri
 
 ```bash
-MAX_LEVERAGE=5                    # Maximum leverage (1-20)
-MAX_POSITION_SIZE_PCT=2.0         # Max position size (% of capital)
-MAX_DAILY_LOSS_PCT=5.0            # Kill-switch threshold
-MAX_CONCURRENT_TRADES=3           # Max simultaneous trades
-RISK_PER_TRADE_PCT=1.5            # Risk per trade
-MIN_RISK_REWARD_RATIO=2.5         # Minimum R/R ratio
-CONFIDENCE_THRESHOLD=75.0         # Min confidence for trade
+# .env dosyasında
+RISK_PER_TRADE_PCT=1.0          # İşlem başına risk %1
+MAX_LEVERAGE=3                   # Maksimum kaldıraç 3x
+MAX_DAILY_LOSS_PCT=5.0          # Günlük kayıp limiti %5
+MAX_CONCURRENT_TRADES=3          # Maksimum eşzamanlı işlem
+CONFIDENCE_THRESHOLD=75.0        # Minimum güven skoru %75
 ```
 
-### Trading Pairs
+### Trading Parametreleri
 
 ```bash
 TRADING_PAIRS=BTC/USDT,ETH/USDT
 TIMEFRAMES=1m,5m,15m
+MIN_RISK_REWARD_RATIO=2.5
 ```
 
-## Testing
+## 📊 Monitoring
+
+### Prometheus Metrikleri
+
+Sistem otomatik olarak şu metrikleri toplar:
+- İşlem sayısı
+- Kazanma oranı
+- P&L
+- Açık pozisyon sayısı
+- API yanıt süreleri
+
+### Grafana Dashboard
+
+1. http://localhost:3000 adresine gidin
+2. Varsayılan kullanıcı: `admin` / `admin`
+3. Dashboard'ları import edin
+
+## 🔒 Güvenlik
+
+### Paper Trading
+
+Sistem varsayılan olarak **paper trading** modunda çalışır:
+- Gerçek para riski YOK
+- Gerçek işlem yapılmaz
+- Tüm işlemler simüle edilir
+
+### Canlı Trading İçin
+
+> ⚠️ **UYARI**: Canlı trading son derece risklidir!
+
+1. En az 1 hafta paper trading yapın
+2. Kazanma oranını doğrulayın (>45%)
+3. Risk yönetimini test edin
+4. Minimum sermaye ile başlayın ($100-500)
+5. İlk 24 saat sürekli izleyin
 
 ```bash
-# Run all tests
-pytest tests/ -v
-
-# Run with coverage
-pytest tests/ --cov=src --cov-report=html
-
-# Run specific test suite
-pytest tests/unit/test_indicators.py -v
+# .env dosyasında
+ENABLE_PAPER_TRADING=false  # Dikkatli kullanın!
 ```
 
-## Backtesting
+## 🐛 Sorun Giderme
+
+### Docker Servisleri Başlamıyor
 
 ```bash
-# Backtest strategy
-python -m src.ml.backtester \
-  --start-date 2024-01-01 \
-  --end-date 2024-12-31 \
-  --pairs BTC/USDT,ETH/USDT \
-  --initial-capital 10000
-```
-
-## Deployment
-
-### Docker Deployment
-
-```bash
-# Build and run all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f trading_system
-
-# Stop services
 docker-compose down
+docker-compose up -d
 ```
 
-### AWS EC2 Deployment
+### Veritabanı Hatası
 
-1. Launch EC2 instance (t3.medium or larger)
-2. Install Docker & Docker Compose
-3. Clone repository
-4. Configure `.env` file
-5. Run `docker-compose up -d`
-6. Configure security groups (ports 8000, 3000, 9090)
-
-## Monitoring & Alerts
-
-### Telegram Alerts
-
-The system sends alerts for:
-- High confidence signals
-- Trade executions
-- Risk warnings (approaching daily loss limit)
-- Kill-switch activation
-- System errors
-
-### Grafana Dashboards
-
-Access Grafana at `http://localhost:3000` to view:
-- Real-time P&L
-- Win rate & profit factor
-- Open positions
-- Signal strength
-- Risk metrics
-
-## Safety Features
-
-1. **Paper Trading Mode**: Test without real capital
-2. **Kill-Switch**: Auto-stop at 5% daily loss
-3. **Position Limits**: Max 3 concurrent trades
-4. **Risk Per Trade**: Limited to 1-2% of capital
-5. **Correlation Filter**: Avoid overexposure
-6. **ATR-Based Stops**: Dynamic stop losses
-
-## Performance Metrics
-
-The system tracks:
-- Win rate
-- Profit factor
-- Sharpe ratio
-- Sortino ratio
-- Maximum drawdown
-- Expectancy
-- Risk-adjusted returns
-
-## Troubleshooting
-
-### Common Issues
-
-**Database connection error:**
 ```bash
-# Check PostgreSQL is running
-docker-compose ps postgres
-
-# Restart PostgreSQL
 docker-compose restart postgres
+python3 -c "from src.database.connection import init_db; init_db()"
 ```
 
-**Exchange API error:**
-- Verify API keys in `.env`
-- Check IP whitelist on exchange
-- Ensure sufficient permissions (futures trading)
+### Port Zaten Kullanımda
 
-**WebSocket disconnection:**
-- System auto-reconnects (max 10 attempts)
-- Check internet connection
-- Verify exchange status
+```bash
+# 8000 portunu kullanan process'i bul
+lsof -i :8000
+# Process'i sonlandır
+kill -9 <PID>
+```
 
-## Development
+## 📈 Performans Beklentileri
 
-### Adding New Indicators
+### Gerçekçi Hedefler
 
-1. Create indicator in `src/indicators/`
-2. Add to signal scoring in `src/signals/signal_generator.py`
-3. Update weights in `src/config/constants.py`
-4. Write tests in `tests/unit/`
+- **Profesyonel**: 3-5% günlük getiri
+- **Yüksek Risk**: 10-15% günlük getiri
+- **Kumar Bölgesi**: 20%+ günlük getiri ⚠️
 
-### Adding New Exchanges
+### Önemli Metrikler
 
-1. Extend `ExchangeClient` in `src/data/exchange_client.py`
-2. Add exchange config in `src/config/constants.py`
-3. Update `.env.example` with API key variables
+- **Kazanma Oranı**: >45%
+- **Profit Factor**: >1.5
+- **Sharpe Ratio**: >1.0
+- **Max Drawdown**: <20%
 
-## License
+## 🛠️ Geliştirme
 
-This project is for educational purposes only. Use at your own risk.
+### Yeni İndikatör Ekleme
 
-## Disclaimer
+```python
+# src/indicators/custom.py
+def my_indicator(df: pd.DataFrame) -> pd.Series:
+    # İndikatör hesaplama
+    return result
+```
 
-- **Not Financial Advice**: This system is not financial advice
-- **No Guarantees**: Past performance does not guarantee future results
-- **High Risk**: Cryptocurrency trading is extremely risky
-- **Regulatory Compliance**: Ensure compliance with local regulations
-- **No Warranty**: Provided "as is" without warranty of any kind
+### Yeni Sinyal Tipi Ekleme
 
-## Support
+```python
+# src/signals/signal_generator.py içinde
+def detect_my_signal(self, df: pd.DataFrame) -> bool:
+    # Sinyal mantığı
+    return signal_detected
+```
 
-For issues and questions:
-1. Check logs in `logs/` directory
-2. Review Grafana dashboards
-3. Enable DEBUG logging in `.env`
+## 📚 Dokümantasyon
 
-## Roadmap
+- [QUICKSTART.md](QUICKSTART.md) - Detaylı kurulum rehberi
+- [API Docs](http://localhost:8000/docs) - Swagger UI
+- [Walkthrough](walkthrough.md) - Sistem geliştirme süreci
 
-- [ ] Support for more exchanges (OKX, Kraken)
-- [ ] Advanced ML models (LSTM, Transformer)
-- [ ] Multi-timeframe analysis
-- [ ] Portfolio optimization
-- [ ] Automated parameter tuning
-- [ ] Mobile app for monitoring
+## ⚠️ Yasal Uyarı
+
+> Bu yazılım eğitim amaçlıdır. Kripto para ticareti son derece risklidir. Tüm sermayenizi kaybedebilirsiniz. Sadece kaybetmeyi göze alabileceğiniz para ile işlem yapın. Geçmiş performans gelecek sonuçları garanti etmez.
+
+## 🤝 Katkıda Bulunma
+
+1. Fork yapın
+2. Feature branch oluşturun (`git checkout -b feature/amazing`)
+3. Commit yapın (`git commit -m 'Add amazing feature'`)
+4. Push yapın (`git push origin feature/amazing`)
+5. Pull Request açın
+
+## 📄 Lisans
+
+MIT License - Detaylar için LICENSE dosyasına bakın.
+
+## 📞 Destek
+
+Sorularınız için:
+- GitHub Issues
+- Email: support@example.com
 
 ---
 
-**Remember: Start with paper trading, validate thoroughly, and never risk more than you can afford to lose.**
+**🎮 Demo Modda Çalışıyor - Güvenle Test Edin!**

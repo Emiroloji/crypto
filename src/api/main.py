@@ -2,9 +2,12 @@
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from src.trading_bot import trading_bot
 from src.risk.risk_monitor import risk_monitor
@@ -19,6 +22,11 @@ app = FastAPI(
     description="Advanced AI-powered crypto intraday trading system",
     version="0.1.0"
 )
+
+# Mount static files for frontend
+static_path = Path(__file__).parent.parent.parent / "static"
+static_path.mkdir(exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
 # Add CORS middleware
 app.add_middleware(
@@ -70,6 +78,16 @@ class PerformanceResponse(BaseModel):
     net_pnl: float
     sharpe_ratio: Optional[float]
     max_drawdown: float
+
+
+# Root endpoint - serve dashboard
+@app.get("/", include_in_schema=False)
+async def root():
+    """Serve the dashboard"""
+    index_path = Path(__file__).parent.parent.parent / "static" / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    return {"message": "Trading System API", "docs": "/docs"}
 
 
 # Health check
