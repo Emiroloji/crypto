@@ -79,7 +79,10 @@ def test_save_signal(mock_get_db, signal_gen):
     }
     
     # Mock ID generation
-    mock_session.add.side_effect = lambda x: setattr(x, 'id', 1)
+    # The actual code calls db.add(signal), db.commit(), then db.refresh(signal)
+    # The ID is populated during refresh in SQLAlchemy (or commit if autocommit)
+    # We mock refresh to set the ID
+    mock_session.refresh.side_effect = lambda x: setattr(x, 'id', 1)
     
     signal_id = signal_gen.save_signal(signal_data)
     
