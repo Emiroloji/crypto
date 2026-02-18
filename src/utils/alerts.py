@@ -14,13 +14,17 @@ class AlertManager:
     
     def __init__(self):
         self.bot: Optional[Bot] = None
-        self.chat_id = settings.telegram_chat_id
         
         if settings.telegram_bot_token:
             try:
                 self.bot = Bot(token=settings.telegram_bot_token)
             except Exception as e:
                 main_logger.error(f"Failed to initialize Telegram bot: {e}")
+    
+    @property
+    def chat_id(self) -> Optional[str]:
+        """Read chat_id fresh from settings each time."""
+        return settings.telegram_chat_id
     
     async def send_alert(self, message: str, priority: str = "INFO") -> bool:
         """

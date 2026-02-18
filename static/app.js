@@ -1,5 +1,6 @@
 // Shared JavaScript for all pages
-const API_BASE = 'http://localhost:8000';
+// Use same origin so the app works in any deployment environment (not just localhost)
+const API_BASE = window.location.origin;
 let botRunning = false;
 let killSwitchActive = false;
 
@@ -121,9 +122,10 @@ function formatDate(dateString) {
     });
 }
 
-// Format number
+// Format number — safely handles null / undefined / NaN
 function formatNumber(num, decimals = 2) {
-    return num.toFixed(decimals);
+    if (num === null || num === undefined || isNaN(num)) return '—';
+    return Number(num).toFixed(decimals);
 }
 
 // Set active nav link

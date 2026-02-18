@@ -25,8 +25,10 @@ def calculate_rsi(df: pd.DataFrame, period: int = None, column: str = 'close') -
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
     
-    rs = gain / loss
+    # Avoid division by zero: when loss=0 all gains → RSI=100
+    rs = gain / loss.replace(0, np.nan)
     rsi = 100 - (100 / (1 + rs))
+    rsi = rsi.fillna(100)  # loss=0 means pure uptrend → RSI=100
     
     return rsi
 
@@ -46,7 +48,11 @@ def calculate_stochastic_rsi(df: pd.DataFrame, period: int = None) -> Tuple[pd.S
     
     rsi = calculate_rsi(df, period)
     
-    stoch_rsi = (rsi - rsi.rolling(period).min()) / (rsi.rolling(period).max() - rsi.rolling(period).min()) * 100
+    rsi_min = rsi.rolling(period).min()
+    rsi_max = rsi.rolling(period).max()
+    rsi_range = rsi_max - rsi_min
+    # Avoid division by zero: flat RSI → neutral StochRSI (50)
+    stoch_rsi = ((rsi - rsi_min) / rsi_range.replace(0, np.nan) * 100).fillna(50)
     stoch_rsi_k = stoch_rsi.rolling(3).mean()  # %K
     stoch_rsi_d = stoch_rsi_k.rolling(3).mean()  # %D
     

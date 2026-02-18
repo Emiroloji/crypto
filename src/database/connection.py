@@ -1,8 +1,7 @@
 """Database connection and session management"""
 
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from contextlib import contextmanager
 
 from src.config.settings import settings
@@ -28,16 +27,18 @@ Base = declarative_base()
 @contextmanager
 def get_db() -> Session:
     """
-    Context manager for database sessions
-    
+    Context manager for database sessions.
+    The caller is responsible for committing; the context manager
+    only rolls back on exception and always closes the session.
+
     Usage:
         with get_db() as db:
             db.query(Model).all()
+            db.commit()
     """
     db = SessionLocal()
     try:
         yield db
-        db.commit()
     except Exception:
         db.rollback()
         raise

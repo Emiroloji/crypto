@@ -13,9 +13,9 @@ class PositionSizer:
     """Calculate optimal position sizes"""
     
     def __init__(self):
-        self.max_position_pct = settings.max_position_size_pct
-        self.risk_per_trade_pct = settings.risk_per_trade_pct
-        self.max_leverage = settings.max_leverage
+        # NOTE: settings are read at call time (not frozen here)
+        # so runtime configuration changes are respected.
+        pass
     
     def calculate_position_size(
         self,
@@ -38,8 +38,13 @@ class PositionSizer:
         Returns:
             Dictionary with position sizing information
         """
+        # Read settings fresh each call
+        max_position_pct = settings.max_position_size_pct
+        risk_per_trade_pct = settings.risk_per_trade_pct
+        max_leverage = settings.max_leverage
+
         # Calculate risk per trade in dollars
-        risk_amount = capital * (self.risk_per_trade_pct / 100)
+        risk_amount = capital * (risk_per_trade_pct / 100)
         
         # Calculate risk per unit
         risk_per_unit = abs(entry_price - stop_loss)
@@ -54,7 +59,10 @@ class PositionSizer:
                 # Use fractional Kelly (more conservative)
                 kelly_multiplier = min(kelly_fraction * 0.5, 1.0)  # Half Kelly
                 position_size *= kelly_multiplier
-                risk_logger.info(f"Kelly adjustment: {kelly_multiplier:.2f}x")
+                risk_logger.info(
+                    f"Kelly adjustment: {kelly_multiplier:.2f}x "
+                    f"(signal grade: {signal_quality.get('grade', 'N/A')})"
+                )
         
         # Apply signal quality adjustment
         if signal_quality:
@@ -66,21 +74,21 @@ class PositionSizer:
         position_value = position_size * entry_price
         
         # Check against max position size
-        max_position_value = capital * (self.max_position_pct / 100)
+        max_position_value = capital * (max_position_pct / 100)
         if position_value > max_position_value:
             position_size = max_position_value / entry_price
             position_value = max_position_value
-            risk_logger.warning(f"Position capped at {self.max_position_pct}% of capital")
+            risk_logger.warning(f"Position capped at {max_position_pct}% of capital")
         
         # Calculate required leverage
         required_leverage = position_value / capital
         
         # Check leverage limits
-        if required_leverage > self.max_leverage:
-            position_size = (capital * self.max_leverage) / entry_price
+        if required_leverage > max_leverage:
+            position_size = (capital * max_leverage) / entry_price
             position_value = position_size * entry_price
-            required_leverage = self.max_leverage
-            risk_logger.warning(f"Leverage capped at {self.max_leverage}x")
+            required_leverage = max_leverage
+            risk_logger.warning(f"Leverage capped at {max_leverage}x")
         
         # Calculate actual risk
         actual_risk = position_size * risk_per_unit

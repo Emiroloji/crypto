@@ -249,18 +249,13 @@ def calculate_obv(df: pd.DataFrame) -> pd.Series:
         OBV Series
     """
     if len(df) < 2:
-        return pd.Series([0] * len(df))
+        return pd.Series([0] * len(df), index=df.index)
 
-    obv = pd.Series(0.0, index=df.index)
+    # Vectorized OBV: direction = sign of close change, multiply by volume, cumsum
+    direction = np.sign(df['close'].diff()).fillna(0)
+    obv = (direction * df['volume']).cumsum()
+    # First bar: seed with its own volume (no previous close to compare)
     obv.iloc[0] = df['volume'].iloc[0]
-
-    for i in range(1, len(df)):
-        if df['close'].iloc[i] > df['close'].iloc[i - 1]:
-            obv.iloc[i] = obv.iloc[i - 1] + df['volume'].iloc[i]
-        elif df['close'].iloc[i] < df['close'].iloc[i - 1]:
-            obv.iloc[i] = obv.iloc[i - 1] - df['volume'].iloc[i]
-        else:
-            obv.iloc[i] = obv.iloc[i - 1]
 
     return obv
 

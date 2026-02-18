@@ -25,9 +25,17 @@ class TradingBot:
     def __init__(self):
         self.running = False
         self.capital = 0.0
-        self.trading_pairs = settings.get_trading_pairs()
-        self.timeframes = settings.get_timeframes()
         self.market_data_manager = MarketDataManager()
+    
+    @property
+    def trading_pairs(self) -> List[str]:
+        """Read trading pairs fresh from settings each time."""
+        return settings.trading_pairs
+
+    @property
+    def timeframes(self) -> List[str]:
+        """Read timeframes fresh from settings each time."""
+        return settings.timeframes
     
     async def start(self):
         """Start the trading bot"""

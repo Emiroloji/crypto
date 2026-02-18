@@ -16,9 +16,9 @@ class RiskMonitor:
     """Monitor risk metrics and enforce limits"""
     
     def __init__(self):
-        self.max_daily_loss_pct = settings.max_daily_loss_pct
-        self.max_concurrent_trades = settings.max_concurrent_trades
         self.kill_switch_active = False
+        # NOTE: limits are read from settings at call time (not frozen here)
+        # so that runtime configuration changes are respected.
     
     def check_daily_loss(self, capital: float) -> tuple[bool, float]:
         """
@@ -47,7 +47,7 @@ class RiskMonitor:
                 loss_pct = (total_pnl / capital) * 100 if capital > 0 else 0
                 
                 # Check thresholds
-                if loss_pct <= -self.max_daily_loss_pct:
+                if loss_pct <= -settings.max_daily_loss_pct:
                     self.activate_kill_switch(loss_pct)
                     return True, loss_pct
                 elif loss_pct <= -ALERT_THRESHOLDS['daily_loss_critical']:
@@ -72,9 +72,9 @@ class RiskMonitor:
             with get_db() as db:
                 open_positions = db.query(Position).count()
                 
-                if open_positions >= self.max_concurrent_trades:
+                if open_positions >= settings.max_concurrent_trades:
                     risk_logger.warning(
-                        f"Concurrent trade limit reached: {open_positions}/{self.max_concurrent_trades}"
+                        f"Concurrent trade limit reached: {open_positions}/{settings.max_concurrent_trades}"
                     )
                     return True, open_positions
                 
@@ -234,7 +234,7 @@ class RiskMonitor:
         # Check concurrent trades
         concurrent_limit, count = self.check_concurrent_trades()
         if concurrent_limit:
-            return False, f"Concurrent trade limit: {count}/{self.max_concurrent_trades}"
+            return False, f"Concurrent trade limit: {count}/{settings.max_concurrent_trades}"
         
         # Check correlation
         corr_limit, _ = self.check_correlation_exposure(symbol)
@@ -257,7 +257,7 @@ class RiskMonitor:
         """Send risk alert"""
         alert_manager.send_alert_sync(
             f"Daily loss {level}: {loss_pct:.2f}%\n"
-            f"Limit: {self.max_daily_loss_pct}%",
+            f"Limit: {settings.max_daily_loss_pct}%",
             priority="WARNING" if level == "warning" else "CRITICAL"
         )
     

@@ -75,40 +75,48 @@ def calculate_supertrend(
     high_low = df['high'] - df['low']
     high_close = np.abs(df['high'] - df['close'].shift())
     low_close = np.abs(df['low'] - df['close'].shift())
-    ranges = pd.concat([high_low, high_close, low_close], axis=1)
-    true_range = ranges.max(axis=1)
+    true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
     atr = true_range.rolling(period).mean()
     
-    # Calculate basic bands
+    # Basic bands
     hl_avg = (df['high'] + df['low']) / 2
     upper_band = hl_avg + (multiplier * atr)
     lower_band = hl_avg - (multiplier * atr)
     
-    # Initialize
-    supertrend = pd.Series(index=df.index, dtype=float)
-    direction = pd.Series(index=df.index, dtype=int)
+    # Vectorized Supertrend using iterative logic via pandas shift
+    # We need one forward pass; use a loop only over NaN-free rows for correctness
+    close = df['close'].values
+    ub = upper_band.values
+    lb = lower_band.values
+    n = len(close)
     
-    for i in range(period, len(df)):
+    supertrend_vals = np.full(n, np.nan)
+    direction_vals = np.zeros(n, dtype=int)
+    
+    for i in range(period, n):
         if i == period:
-            supertrend.iloc[i] = lower_band.iloc[i]
-            direction.iloc[i] = 1
+            supertrend_vals[i] = lb[i]
+            direction_vals[i] = 1
         else:
-            # Uptrend
-            if direction.iloc[i-1] == 1:
-                if df['close'].iloc[i] <= supertrend.iloc[i-1]:
-                    supertrend.iloc[i] = upper_band.iloc[i]
-                    direction.iloc[i] = -1
+            prev_dir = direction_vals[i - 1]
+            prev_st = supertrend_vals[i - 1]
+            if prev_dir == 1:  # Uptrend
+                if close[i] <= prev_st:
+                    supertrend_vals[i] = ub[i]
+                    direction_vals[i] = -1
                 else:
-                    supertrend.iloc[i] = max(lower_band.iloc[i], supertrend.iloc[i-1])
-                    direction.iloc[i] = 1
-            # Downtrend
-            else:
-                if df['close'].iloc[i] >= supertrend.iloc[i-1]:
-                    supertrend.iloc[i] = lower_band.iloc[i]
-                    direction.iloc[i] = 1
+                    supertrend_vals[i] = max(lb[i], prev_st)
+                    direction_vals[i] = 1
+            else:  # Downtrend
+                if close[i] >= prev_st:
+                    supertrend_vals[i] = lb[i]
+                    direction_vals[i] = 1
                 else:
-                    supertrend.iloc[i] = min(upper_band.iloc[i], supertrend.iloc[i-1])
-                    direction.iloc[i] = -1
+                    supertrend_vals[i] = min(ub[i], prev_st)
+                    direction_vals[i] = -1
+    
+    supertrend = pd.Series(supertrend_vals, index=df.index)
+    direction = pd.Series(direction_vals, index=df.index)
     
     return supertrend, direction
 
@@ -180,10 +188,12 @@ def calculate_adx(df: pd.DataFrame, period: int = None) -> Tuple[pd.Series, pd.S
     plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0)
     minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0)
     
-    # Smooth the values
+    # Smooth the values — preserve original DataFrame index to avoid NaN from misalignment
+    plus_dm_series = pd.Series(plus_dm, index=df.index)
+    minus_dm_series = pd.Series(minus_dm, index=df.index)
     atr = true_range.rolling(window=period).mean()
-    plus_di = 100 * (pd.Series(plus_dm).rolling(window=period).mean() / atr)
-    minus_di = 100 * (pd.Series(minus_dm).rolling(window=period).mean() / atr)
+    plus_di = 100 * (plus_dm_series.rolling(window=period).mean() / atr)
+    minus_di = 100 * (minus_dm_series.rolling(window=period).mean() / atr)
     
     # Calculate ADX
     dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di)
@@ -241,7 +251,7 @@ def get_trend_signals(df: pd.DataFrame) -> dict:
     cloud_top = max(senkou_a, senkou_b) if not pd.isna(senkou_a) and not pd.isna(senkou_b) else None
     cloud_bottom = min(senkou_a, senkou_b) if not pd.isna(senkou_a) and not pd.isna(senkou_b) else None
     
-    if cloud_top and cloud_bottom:
+    if cloud_top is not None and cloud_bottom is not None:
         if current_price > cloud_top:
             signals['ichimoku_position'] = 1
         elif current_price < cloud_bottom:

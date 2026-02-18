@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from src.trading_bot import trading_bot
+from src.execution.trade_executor import trade_executor
 from src.risk.risk_monitor import risk_monitor
 from src.database.connection import get_db, init_db
 from src.database.models import Trade, Position, Signal, Performance
@@ -130,9 +131,9 @@ async def get_status():
         running=trading_bot.running,
         paper_trading=settings.is_paper_trading(),
         kill_switch_active=risk_monitor.kill_switch_active,
-        capital=trading_bot.capital if hasattr(trading_bot, 'capital') else 0.0,
+        capital=trading_bot.capital,
         open_positions=open_positions,
-        trading_pairs=settings.get_trading_pairs()
+        trading_pairs=settings.trading_pairs
     )
 
 
@@ -198,8 +199,6 @@ async def get_positions():
 @app.post("/positions/{symbol}/close")
 async def close_position(symbol: str):
     """Close a specific position"""
-    from src.execution.trade_executor import trade_executor
-    
     success = await trade_executor.close_position(symbol, "manual")
     
     if success:
@@ -227,6 +226,7 @@ async def get_trades(limit: int = 50):
                 exit_price=t.exit_price,
                 pnl=t.pnl,
                 pnl_percent=t.pnl_percent,
+                fees=t.fees,
                 created_at=t.entry_timestamp
             )
             for t in trades
@@ -289,8 +289,8 @@ async def get_performance(days: int = 30):
 async def get_config():
     """Get current configuration"""
     return {
-        "trading_pairs": settings.get_trading_pairs(),
-        "timeframes": settings.get_timeframes(),
+        "trading_pairs": settings.trading_pairs,
+        "timeframes": settings.timeframes,
         "max_leverage": settings.max_leverage,
         "max_position_size_pct": settings.max_position_size_pct,
         "max_daily_loss_pct": settings.max_daily_loss_pct,

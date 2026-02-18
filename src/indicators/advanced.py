@@ -204,8 +204,9 @@ def calculate_stochastic_rsi(df: pd.DataFrame, rsi_period: int = 14, stoch_perio
     # Calculate Stochastic of RSI
     rsi_min = rsi.rolling(window=stoch_period).min()
     rsi_max = rsi.rolling(window=stoch_period).max()
-    
-    stoch_rsi = 100 * (rsi - rsi_min) / (rsi_max - rsi_min)
+    rsi_range = rsi_max - rsi_min
+    # Avoid division by zero: flat RSI → neutral StochRSI (50)
+    stoch_rsi = (100 * (rsi - rsi_min) / rsi_range.replace(0, np.nan)).fillna(50)
     stoch_rsi_d = stoch_rsi.rolling(window=3).mean()  # %D is 3-period SMA of %K
     
     return stoch_rsi.fillna(50), stoch_rsi_d.fillna(50)

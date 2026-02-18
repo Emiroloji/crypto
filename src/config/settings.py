@@ -1,6 +1,6 @@
 """Centralized configuration management using Pydantic Settings"""
 
-from typing import List
+from typing import List, Union
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator
 
@@ -67,26 +67,25 @@ class Settings(BaseSettings):
     )
     
     @field_validator("trading_pairs")
-    def parse_trading_pairs(cls, v: str) -> List[str]:
-        """Parse comma-separated trading pairs"""
+    def parse_trading_pairs(cls, v) -> List[str]:
+        """Parse comma-separated trading pairs (handles both str and list)"""
+        if isinstance(v, list):
+            return v
         return [pair.strip() for pair in v.split(",") if pair.strip()]
     
     @field_validator("timeframes")
-    def parse_timeframes(cls, v: str) -> List[str]:
-        """Parse comma-separated timeframes"""
+    def parse_timeframes(cls, v) -> List[str]:
+        """Parse comma-separated timeframes (handles both str and list)"""
+        if isinstance(v, list):
+            return v
         return [tf.strip() for tf in v.split(",") if tf.strip()]
-    
-    def get_trading_pairs(self) -> List[str]:
-        """Get list of trading pairs"""
-        if isinstance(self.trading_pairs, str):
-            return [pair.strip() for pair in self.trading_pairs.split(",") if pair.strip()]
-        return self.trading_pairs
-    
-    def get_timeframes(self) -> List[str]:
-        """Get list of timeframes"""
-        if isinstance(self.timeframes, str):
-            return [tf.strip() for tf in self.timeframes.split(",") if tf.strip()]
-        return self.timeframes
+
+    @field_validator("allowed_origins")
+    def parse_allowed_origins(cls, v) -> List[str]:
+        """Parse comma-separated CORS origins from env var (handles both str and list)"""
+        if isinstance(v, list):
+            return v
+        return [origin.strip() for origin in v.split(",") if origin.strip()]
     
     def is_production(self) -> bool:
         """Check if running in production"""

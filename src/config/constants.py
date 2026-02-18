@@ -46,6 +46,13 @@ SIGNAL_WEIGHTS: Dict[str, float] = {
     "mathematical_models": 0.05,     # 5%  (Regression, S/R, Correlation, Vol Forecast)
 }
 
+# Validate weights sum to 1.0 at startup
+_weights_total = sum(SIGNAL_WEIGHTS.values())
+assert abs(_weights_total - 1.0) < 1e-9, (
+    f"SIGNAL_WEIGHTS must sum to 1.0, got {_weights_total:.4f}. "
+    "Check config/constants.py."
+)
+
 # Risk Management Constants
 RISK_CONSTANTS: Dict[str, Any] = {
     "atr_stop_multiplier": 2.0,      # Stop loss = ATR * multiplier

@@ -140,11 +140,8 @@ class TradeExecutor:
                 f"Order placed: {order['id']} - {side.upper()} {position_size} {symbol}"
             )
             
-            # Save trade to database
-            trade_id = self._save_trade(signal_data, position_info, order)
-            
-            # Create position record
-            self._create_position(signal_data, position_info, order)
+            # Save trade and position in a single transaction
+            trade_id = self._save_trade_and_position(signal_data, position_info, order)
             
             return trade_id
             
@@ -152,26 +149,25 @@ class TradeExecutor:
             execution_logger.error(f"Error placing order: {e}")
             return None
     
-    def _save_trade(
+    def _save_trade_and_position(
         self,
         signal_data: Dict,
         position_info: Dict,
         order: Dict
     ) -> Optional[int]:
-        """Save trade to database"""
+        """Save trade and position in a single atomic DB transaction"""
         try:
             with get_db() as db:
-                # Get signal ID if exists
-                signal_id = None
-                if 'signal_id' in signal_data:
-                    signal_id = signal_data['signal_id']
-                
+                signal_id = signal_data.get('signal_id')
+                entry_price = order.get('price', signal_data['entry_price'])
+                now = datetime.now(timezone.utc)
+
                 trade = Trade(
                     symbol=signal_data['symbol'],
                     direction=signal_data['direction'],
                     status=TradeStatus.OPEN,
-                    entry_timestamp=datetime.now(timezone.utc),
-                    entry_price=order.get('price', signal_data['entry_price']),
+                    entry_timestamp=now,
+                    entry_price=entry_price,
                     position_size=position_info['position_size'],
                     leverage=int(position_info['leverage']),
                     stop_loss=signal_data['stop_loss'],
@@ -179,47 +175,33 @@ class TradeExecutor:
                     signal_id=signal_id,
                     exchange_order_id=order.get('id'),
                 )
-                
                 db.add(trade)
-                db.commit()
-                db.refresh(trade)
-                
-                execution_logger.info(f"Trade saved: ID {trade.id}")
-                return trade.id
-                
-        except Exception as e:
-            execution_logger.error(f"Error saving trade: {e}")
-            return None
-    
-    def _create_position(
-        self,
-        signal_data: Dict,
-        position_info: Dict,
-        order: Dict
-    ):
-        """Create position record"""
-        try:
-            with get_db() as db:
+
                 position = Position(
                     symbol=signal_data['symbol'],
                     direction=signal_data['direction'],
-                    entry_price=order.get('price', signal_data['entry_price']),
-                    current_price=order.get('price', signal_data['entry_price']),
+                    entry_price=entry_price,
+                    current_price=entry_price,
                     position_size=position_info['position_size'],
                     leverage=int(position_info['leverage']),
                     unrealized_pnl=0.0,
                     stop_loss=signal_data['stop_loss'],
                     take_profit=signal_data['take_profit'],
-                    opened_at=datetime.now(timezone.utc),
+                    opened_at=now,
                 )
-                
                 db.add(position)
+
                 db.commit()
-                
-                execution_logger.info(f"Position created for {signal_data['symbol']}")
-                
+                db.refresh(trade)
+
+                execution_logger.info(
+                    f"Trade {trade.id} and position saved for {signal_data['symbol']}"
+                )
+                return trade.id
+
         except Exception as e:
-            execution_logger.error(f"Error creating position: {e}")
+            execution_logger.error(f"Error saving trade and position: {e}")
+            return None
     
     async def close_position(
         self,
@@ -260,15 +242,17 @@ class TradeExecutor:
                 
                 exit_price = order.get('price', position.current_price)
                 fee_rate = 0.0004  # 0.04% taker fee (Binance default)
+                entry_fee = position.entry_price * position.position_size * fee_rate
                 exit_fee = exit_price * position.position_size * fee_rate
-                
-                # Calculate P&L (net of fees)
+                total_fees = entry_fee + exit_fee
+
+                # Calculate P&L (net of both entry and exit fees)
                 if position.direction == TradeDirection.LONG:
                     gross_pnl = (exit_price - position.entry_price) * position.position_size
                 else:
                     gross_pnl = (position.entry_price - exit_price) * position.position_size
-                
-                pnl = gross_pnl - exit_fee
+
+                pnl = gross_pnl - total_fees
                 pnl_percent = (pnl / (position.entry_price * position.position_size)) * 100
                 
                 # Update trade record
@@ -283,7 +267,7 @@ class TradeExecutor:
                     trade.exit_price = exit_price
                     trade.pnl = pnl
                     trade.pnl_percent = pnl_percent
-                    trade.fees = exit_fee
+                    trade.fees = total_fees
                     trade.notes = f"Closed: {reason}"
                 
                 # Delete position

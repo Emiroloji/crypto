@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, DateTime,
-    Text, JSON, ForeignKey, Index, Enum as SQLEnum
+    Text, JSON, ForeignKey, Index, UniqueConstraint, Enum as SQLEnum
 )
 from sqlalchemy.orm import relationship
 import enum
@@ -32,16 +32,17 @@ class MarketData(Base):
     id = Column(Integer, primary_key=True, index=True)
     symbol = Column(String(20), nullable=False, index=True)
     timeframe = Column(String(10), nullable=False)
-    timestamp = Column(DateTime, nullable=False, index=True)
+    timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
     open = Column(Float, nullable=False)
     high = Column(Float, nullable=False)
     low = Column(Float, nullable=False)
     close = Column(Float, nullable=False)
     volume = Column(Float, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     
     __table_args__ = (
         Index('idx_symbol_timeframe_timestamp', 'symbol', 'timeframe', 'timestamp'),
+        UniqueConstraint('symbol', 'timeframe', 'timestamp', name='uq_market_data_symbol_tf_ts'),
     )
 
 
@@ -51,12 +52,12 @@ class OrderBook(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     symbol = Column(String(20), nullable=False, index=True)
-    timestamp = Column(DateTime, nullable=False, index=True)
-    bids = Column(JSON, nullable=False)  # [[price, quantity], ...]
-    asks = Column(JSON, nullable=False)  # [[price, quantity], ...]
+    timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
+    bids = Column(JSON, nullable=False)
+    asks = Column(JSON, nullable=False)
     bid_ask_spread = Column(Float)
-    imbalance_ratio = Column(Float)  # bid_volume / ask_volume
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    imbalance_ratio = Column(Float)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class Trade(Base):
@@ -69,13 +70,13 @@ class Trade(Base):
     status = Column(SQLEnum(TradeStatus), nullable=False, default=TradeStatus.PENDING)
     
     # Entry
-    entry_timestamp = Column(DateTime, nullable=False)
+    entry_timestamp = Column(DateTime(timezone=True), nullable=False)
     entry_price = Column(Float, nullable=False)
     position_size = Column(Float, nullable=False)
     leverage = Column(Integer, default=1)
     
     # Exit
-    exit_timestamp = Column(DateTime)
+    exit_timestamp = Column(DateTime(timezone=True))
     exit_price = Column(Float)
     
     # Risk Management
@@ -92,8 +93,8 @@ class Trade(Base):
     signal_id = Column(Integer, ForeignKey("signals.id"))
     exchange_order_id = Column(String(100))
     notes = Column(Text)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
     signal = relationship("Signal", back_populates="trades")
@@ -114,8 +115,8 @@ class Position(Base):
     stop_loss = Column(Float, nullable=False)
     take_profit = Column(Float, nullable=False)
     trailing_stop = Column(Float)
-    opened_at = Column(DateTime, nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    opened_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class Signal(Base):
@@ -124,7 +125,7 @@ class Signal(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     symbol = Column(String(20), nullable=False, index=True)
-    timestamp = Column(DateTime, nullable=False, index=True)
+    timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
     direction = Column(SQLEnum(TradeDirection), nullable=False)
     
     # Signal Components
@@ -147,13 +148,13 @@ class Signal(Base):
     
     # Execution
     executed = Column(Boolean, default=False)
-    execution_timestamp = Column(DateTime)
+    execution_timestamp = Column(DateTime(timezone=True))
     
     # Metadata
-    signal_type = Column(String(50))  # breakout, pullback, reversal, news
-    market_regime = Column(String(20))  # trending, ranging, volatile
+    signal_type = Column(String(50))
+    market_regime = Column(String(20))
     notes = Column(Text)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     
     # Relationships
     trades = relationship("Trade", back_populates="signal")
@@ -164,7 +165,7 @@ class Performance(Base):
     __tablename__ = "performance"
     
     id = Column(Integer, primary_key=True, index=True)
-    date = Column(DateTime, nullable=False, unique=True, index=True)
+    date = Column(DateTime(timezone=True), nullable=False, unique=True, index=True)
     
     # Trading Metrics
     total_trades = Column(Integer, default=0)
@@ -190,7 +191,7 @@ class Performance(Base):
     ending_capital = Column(Float, nullable=False)
     peak_capital = Column(Float, nullable=False)
     
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class SentimentData(Base):
@@ -199,20 +200,20 @@ class SentimentData(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     symbol = Column(String(20), nullable=False, index=True)
-    timestamp = Column(DateTime, nullable=False, index=True)
-    source = Column(String(50), nullable=False)  # twitter, reddit, news, telegram
+    timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
+    source = Column(String(50), nullable=False)
     
     # Sentiment
-    sentiment_score = Column(Float, nullable=False)  # -1 to 1
-    sentiment_label = Column(String(20))  # bullish, bearish, neutral
+    sentiment_score = Column(Float, nullable=False)
+    sentiment_label = Column(String(20))
     confidence = Column(Float)
     
     # Metadata
     text_sample = Column(Text)
     author = Column(String(100))
-    engagement_score = Column(Float)  # likes, retweets, upvotes
+    engagement_score = Column(Float)
     
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     
     __table_args__ = (
         Index('idx_symbol_timestamp', 'symbol', 'timestamp'),
@@ -225,7 +226,7 @@ class OnChainData(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     symbol = Column(String(20), nullable=False, index=True)
-    timestamp = Column(DateTime, nullable=False, index=True)
+    timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
     
     # Whale Activity
     whale_transactions = Column(Integer, default=0)
@@ -242,7 +243,7 @@ class OnChainData(Base):
     
     # Metadata
     data_source = Column(String(50))
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class SystemState(Base):
@@ -252,4 +253,4 @@ class SystemState(Base):
     id = Column(Integer, primary_key=True, index=True)
     key = Column(String(100), nullable=False, unique=True, index=True)
     value = Column(JSON, nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

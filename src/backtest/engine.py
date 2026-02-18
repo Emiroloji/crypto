@@ -100,10 +100,24 @@ class BacktestEngine:
                         exit_time=None
                     )
                 elif position.side == 'SHORT':
-                    # Close SHORT and Open LONG (Flip)
+                    # Close SHORT, then open LONG (flip)
                     self._close_position(position, current_price, current_time)
                     position = None
-                    # Re-evaluate logic for opening long could go here
+                    # Open LONG immediately after flip
+                    amount_to_invest = min(self.current_capital, signal.get('amount_usd', self.current_capital * 0.95))
+                    fee = amount_to_invest * self.fee_rate
+                    net_investment = amount_to_invest - fee
+                    amount = net_investment / current_price
+                    self.current_capital -= amount_to_invest
+                    position = Trade(
+                        symbol=symbol,
+                        entry_price=current_price,
+                        exit_price=None,
+                        amount=amount,
+                        side='LONG',
+                        entry_time=current_time,
+                        exit_time=None
+                    )
             
             elif signal['action'] == 'SELL':
                 if position and position.side == 'LONG':

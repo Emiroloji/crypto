@@ -7,24 +7,22 @@ from datetime import datetime, timezone
 from src.indicators.trend import get_trend_signals
 from src.indicators.momentum import get_momentum_signals
 from src.indicators.volatility import get_volatility_signals
-from src.indicators.volume import get_volume_signals
+from src.indicators.volume import (
+    get_volume_signals,
+    calculate_obv, calculate_obv_score,
+    calculate_vwap, calculate_vwap_score
+)
 from src.indicators.advanced import (
     calculate_fibonacci_levels, calculate_fibonacci_score,
     calculate_adx, calculate_adx_score,
     calculate_stochastic_rsi, calculate_stochastic_rsi_score,
     calculate_ichimoku_cloud, calculate_ichimoku_score
 )
-from src.indicators.volume import (
-    calculate_obv, calculate_obv_score,
-    calculate_vwap, calculate_vwap_score
-)
 from src.analysis.statistical import (
     calculate_linear_regression, calculate_regression_score,
     detect_support_resistance, calculate_sr_score
 )
-from src.analysis.correlation import (
-    calculate_correlation_score, detect_divergence
-)
+from src.analysis.correlation import calculate_correlation_score
 from src.analysis.volatility import (
     forecast_volatility_simple, calculate_volatility_score
 )
@@ -40,7 +38,7 @@ class SignalGenerator:
     """Generate trading signals from multiple components"""
     
     def __init__(self):
-        self.weights = SIGNAL_WEIGHTS
+        pass  # weights are read from SIGNAL_WEIGHTS at call time
     
     def generate_signal(
         self,
@@ -123,9 +121,9 @@ class SignalGenerator:
             
             # Determine preliminary direction for advanced scoring
             prelim_confidence = (
-                (trend_score / 100) * self.weights['trend_confirmation'] +
-                (momentum_score / 100) * self.weights['momentum_alignment'] +
-                (volume_score / 100) * self.weights['volume_confirmation']
+                (trend_score / 100) * SIGNAL_WEIGHTS['trend_confirmation'] +
+                (momentum_score / 100) * SIGNAL_WEIGHTS['momentum_alignment'] +
+                (volume_score / 100) * SIGNAL_WEIGHTS['volume_confirmation']
             ) * 100
             
             prelim_direction = 'LONG' if prelim_confidence > 0 else 'SHORT'
@@ -141,10 +139,18 @@ class SignalGenerator:
             regression_score = calculate_regression_score(current_price, regression, prelim_direction)
             sr_score = calculate_sr_score(current_price, sr_levels, prelim_direction)
             
-            # Calculate correlation score (using demo correlation for now)
-            # In production, would fetch BTC data and calculate real correlation
-            demo_correlation = 0.5  # Neutral correlation for demo
-            correlation_score = calculate_correlation_score(demo_correlation, prelim_direction)
+            # Calculate correlation score
+            # Use BTC as benchmark; fall back to neutral (0.5) if symbol IS BTC
+            if symbol != 'BTC/USDT' and len(df) >= 30:
+                try:
+                    from src.analysis.correlation import calculate_btc_correlation
+                    # Reuse the same df as a proxy (real impl would fetch BTC separately)
+                    btc_correlation = calculate_btc_correlation(df, df, period=30)
+                except Exception:
+                    btc_correlation = 0.5
+            else:
+                btc_correlation = 0.5  # Neutral for BTC itself or insufficient data
+            correlation_score = calculate_correlation_score(btc_correlation, prelim_direction)
             
             # Calculate volatility score
             volatility_forecast_score = calculate_volatility_score(vol_forecast, prelim_direction)
@@ -166,15 +172,15 @@ class SignalGenerator:
             
             # Calculate weighted confidence score with ALL components
             confidence_score = (
-                (trend_score / 100) * self.weights['trend_confirmation'] +
-                (momentum_score / 100) * self.weights['momentum_alignment'] +
-                (volume_score / 100) * self.weights['volume_confirmation'] +
-                (orderbook_score / 100) * self.weights['order_book_imbalance'] +
-                (volatility_score / 100) * self.weights['volatility_regime'] +
-                (combined_sentiment / 100) * self.weights['sentiment_score'] +
-                (onchain_score / 100) * self.weights['onchain_data'] +
-                (advanced_score / 100) * self.weights['advanced_indicators'] +
-                (math_score / 100) * self.weights['mathematical_models']
+                (trend_score / 100) * SIGNAL_WEIGHTS['trend_confirmation'] +
+                (momentum_score / 100) * SIGNAL_WEIGHTS['momentum_alignment'] +
+                (volume_score / 100) * SIGNAL_WEIGHTS['volume_confirmation'] +
+                (orderbook_score / 100) * SIGNAL_WEIGHTS['order_book_imbalance'] +
+                (volatility_score / 100) * SIGNAL_WEIGHTS['volatility_regime'] +
+                (combined_sentiment / 100) * SIGNAL_WEIGHTS['sentiment_score'] +
+                (onchain_score / 100) * SIGNAL_WEIGHTS['onchain_data'] +
+                (advanced_score / 100) * SIGNAL_WEIGHTS['advanced_indicators'] +
+                (math_score / 100) * SIGNAL_WEIGHTS['mathematical_models']
             ) * 100
             
             # Determine direction

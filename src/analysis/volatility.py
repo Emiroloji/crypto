@@ -56,22 +56,22 @@ def forecast_volatility_simple(df: pd.DataFrame, period: int = 20, forecast_days
     # Current volatility (EWMA)
     ewma_vol = returns.ewm(span=period).std().iloc[-1] * np.sqrt(365) * 100
     
-    # Simple forecast: weighted average of recent volatility
-    recent_vols = []
-    for i in range(5, min(20, len(df))):
-        vol = returns.tail(i).std() * np.sqrt(365) * 100
-        recent_vols.append(vol)
-    
-    if recent_vols:
-        # Forecast as weighted average (more weight on recent)
+    # Vectorized rolling volatility forecast (replaces manual loop)
+    window_sizes = range(5, min(20, len(df)))
+    if window_sizes:
+        recent_vols = [
+            returns.tail(w).std() * np.sqrt(365) * 100
+            for w in window_sizes
+        ]
         weights = np.exp(np.linspace(-1, 0, len(recent_vols)))
         weights /= weights.sum()
-        forecasted_vol = np.average(recent_vols, weights=weights)
-        
-        # Trend: increasing or decreasing volatility
-        vol_trend = (recent_vols[-1] - recent_vols[0]) / recent_vols[0] * 100 if recent_vols[0] > 0 else 0
+        forecasted_vol = float(np.average(recent_vols, weights=weights))
+        vol_trend = (
+            (recent_vols[-1] - recent_vols[0]) / recent_vols[0] * 100
+            if recent_vols[0] > 0 else 0.0
+        )
     else:
-        forecasted_vol = ewma_vol
+        forecasted_vol = float(ewma_vol)
         vol_trend = 0.0
     
     return {
