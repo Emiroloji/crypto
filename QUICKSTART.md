@@ -1,4 +1,4 @@
-"""Quick Start Guide
+# Quick Start Guide
 
 ## Prerequisites
 
@@ -73,6 +73,7 @@ python -c "from src.database.connection import init_db; init_db()"
 
 ```bash
 # Run in development mode (paper trading)
+source venv/bin/activate
 python main.py
 ```
 
@@ -137,6 +138,12 @@ curl http://localhost:8000/positions
 curl http://localhost:8000/performance?days=7
 ```
 
+### 5. Run Tests
+
+```bash
+PYTHONPATH=. ./venv/bin/python -m pytest tests/ -v
+```
+
 ## Docker Deployment (Full Stack)
 
 ```bash
@@ -190,11 +197,11 @@ pip install -r requirements.txt --force-reinstall
 
 ## Important Reminders
 
-⚠️ **This is a high-risk trading system**
-⚠️ **Always start with paper trading**
-⚠️ **Never risk more than you can afford to lose**
-⚠️ **Professional funds target 3-5% daily returns**
-⚠️ **Targeting 20%+ approaches gambling territory**
+> [!WARNING]
+> This is a high-risk trading system. Always start with paper trading.
+> Never risk more than you can afford to lose.
+> Professional funds target 3-5% daily returns.
+> Targeting 20%+ approaches gambling territory.
 
 ## Support
 
@@ -204,4 +211,3 @@ Check logs in `logs/` directory for detailed information:
 - `signals.log` - Signal generation logs
 - `execution.log` - Trade execution logs
 - `risk.log` - Risk management logs
-"""

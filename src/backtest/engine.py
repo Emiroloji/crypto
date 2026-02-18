@@ -130,15 +130,12 @@ class BacktestEngine:
         net_value = gross_value - fee
         
         if trade.side == 'LONG':
-            # Profit = (Exit - Entry) * Amount
-            pnl = (price - trade.entry_price) * trade.amount
             initial_value = trade.amount * trade.entry_price
             
-            # Net Value = Exit Value - Fee
-            # We add Net Value back to capital
+            # Return exit proceeds (net of fee) to capital
             self.current_capital += net_value
             
-            # Pnl = Net Value - Cost
+            # Realized PnL = exit proceeds - entry cost
             realized_pnl = net_value - initial_value
             
         elif trade.side == 'SHORT':
