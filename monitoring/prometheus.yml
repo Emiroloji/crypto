@@ -1,4 +1,4 @@
-"""Prometheus monitoring configuration"""
+# Prometheus monitoring configuration
 
 global:
   scrape_interval: 15s

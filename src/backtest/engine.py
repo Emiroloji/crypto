@@ -130,18 +130,58 @@ class BacktestEngine:
         net_value = gross_value - fee
         
         if trade.side == 'LONG':
-            trade.pnl = net_value - (trade.amount * trade.entry_price) # Simplified
-            # Correct logic:
-            # Entry Cost was: amount * entry_price (actually we paid fees on top)
-            # Exit Value is: amount * exit_price - fee
-            # We already deducted entry cost from capital.
-            # So we just add back net_value.
+            # Profit = (Exit - Entry) * Amount
+            pnl = (price - trade.entry_price) * trade.amount
+            initial_value = trade.amount * trade.entry_price
+            
+            # Net Value = Exit Value - Fee
+            # We add Net Value back to capital
             self.current_capital += net_value
             
-            initial_value = trade.amount * trade.entry_price
-            trade.pnl = net_value - initial_value 
-            trade.pnl_percent = (trade.pnl / initial_value) * 100
+            # Pnl = Net Value - Cost
+            realized_pnl = net_value - initial_value
             
+        elif trade.side == 'SHORT':
+            # Profit = (Entry - Exit) * Amount
+            pnl = (trade.entry_price - price) * trade.amount
+            initial_value = trade.amount * trade.entry_price
+            
+            # For SHORT:
+            # We received Entry Value (Entry Price * Amount) when opening [Theoretically, simplified]
+            # But in this simple engine we deducted "Cost" (collateral) at start.
+            # To Close: We "Buy Back" at Exit Price.
+            # Cost to Close = Exit Price * Amount + Fee
+            # PnL = Initial Collateral + (Entry - Exit)*Amount - Fees
+            
+            # Simplified Capital Logic:
+            # Capital was reduced by 'amount_to_invest' at open.
+            # Return Capital = amount_to_invest + PnL
+            
+            # Logic:
+            # Entry: Sold 'amount' @ entry_price. Value = amount * entry_price.
+            # Exit: Bought 'amount' @ price. Cost = amount * price.
+            # GW PnL = (Entry - Exit) * Amount
+            
+            gross_pnl = (trade.entry_price - price) * trade.amount
+            
+            # We paid fee on entry (deducted from capital).
+            # We pay fee on exit:
+            exit_fee = (price * trade.amount) * self.fee_rate
+            
+            realized_pnl = gross_pnl - exit_fee
+            
+            # Add back the original "investment" plus PnL
+            # Assuming 1x leverage, investment ~= entry_value
+            investment = trade.amount * trade.entry_price
+            
+            # Note: Entry fee was already deducted from capital in 'run' loop.
+            # So capital += investment + realized_pnl
+            self.current_capital += (investment + realized_pnl)
+            
+            initial_value = investment
+
+        trade.pnl = realized_pnl
+        trade.pnl_percent = (realized_pnl / initial_value) * 100 if initial_value > 0 else 0.0
         self.trades.append(trade)
 
     def _generate_report(self) -> Dict:

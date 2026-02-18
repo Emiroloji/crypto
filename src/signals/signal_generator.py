@@ -166,15 +166,12 @@ class SignalGenerator:
             
             # Calculate weighted confidence score with ALL components
             confidence_score = (
-                (trend_score / 100) * 0.25 +           # 25% - Trend confirmation
-                (momentum_score / 100) * 0.20 +        # 20% - Momentum alignment
-                (volume_score / 100) * 0.15 +          # 15% - Volume confirmation
-                (orderbook_score / 100) * 0.10 +       # 10% - Order book imbalance
-                (volatility_score / 100) * 0.10 +      # 10% - Volatility regime
-                (advanced_score / 100) * 0.10 +        # 10% - Advanced indicators (6)
-                (math_score / 100) * 0.08 +            # 8% - Mathematical models (4)
-                (combined_sentiment / 100) * 0.07 +    # 7% - Sentiment (F&G + News)
-                (sentiment_score / 100) * 0.00 +       # 0% - Legacy sentiment (unused)
+                (trend_score / 100) * self.weights['trend_confirmation'] +
+                (momentum_score / 100) * self.weights['momentum_alignment'] +
+                (volume_score / 100) * self.weights['volume_confirmation'] +
+                (orderbook_score / 100) * self.weights['order_book_imbalance'] +
+                (volatility_score / 100) * self.weights['volatility_regime'] +
+                (combined_sentiment / 100) * self.weights['sentiment_score'] +
                 (onchain_score / 100) * self.weights['onchain_data']
             ) * 100
             

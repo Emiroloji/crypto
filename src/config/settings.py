@@ -2,7 +2,7 @@
 
 from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 
 
 class Settings(BaseSettings):
@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     
     # Risk Management
     risk_per_trade_pct: float = Field(default=1.5, ge=0.5, le=5.0, description="Risk per trade as % of capital")
+    stop_loss_pct: float = Field(default=2.0, ge=0.5, le=10.0, description="Default stop loss percentage")
     min_risk_reward_ratio: float = Field(default=2.5, ge=1.0, le=10.0, description="Minimum risk/reward ratio")
     confidence_threshold: float = Field(default=75.0, ge=50.0, le=100.0, description="Minimum confidence score for trade")
     
@@ -59,12 +60,12 @@ class Settings(BaseSettings):
     telegram_bot_token: str = Field(default="", description="Telegram bot token")
     telegram_chat_id: str = Field(default="", description="Telegram chat ID for alerts")
     
-    @validator("trading_pairs")
+    @field_validator("trading_pairs")
     def parse_trading_pairs(cls, v: str) -> List[str]:
         """Parse comma-separated trading pairs"""
         return [pair.strip() for pair in v.split(",") if pair.strip()]
     
-    @validator("timeframes")
+    @field_validator("timeframes")
     def parse_timeframes(cls, v: str) -> List[str]:
         """Parse comma-separated timeframes"""
         return [tf.strip() for tf in v.split(",") if tf.strip()]
