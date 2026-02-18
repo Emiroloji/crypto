@@ -69,6 +69,7 @@ class TradeResponse(BaseModel):
     exit_price: Optional[float]
     pnl: Optional[float]
     pnl_percent: Optional[float]
+    created_at: datetime
 
 
 class PerformanceResponse(BaseModel):
@@ -208,7 +209,8 @@ async def get_trades(limit: int = 50):
                 entry_price=t.entry_price,
                 exit_price=t.exit_price,
                 pnl=t.pnl,
-                pnl_percent=t.pnl_percent
+                pnl_percent=t.pnl_percent,
+                created_at=t.entry_timestamp
             )
             for t in trades
         ]
@@ -228,10 +230,14 @@ async def get_signals(limit: int = 20):
                 "id": s.id,
                 "symbol": s.symbol,
                 "timestamp": s.timestamp.isoformat(),
+                "created_at": s.timestamp.isoformat(),
                 "direction": s.direction.value if s.direction else None,
                 "confidence_score": s.confidence_score,
                 "risk_reward_ratio": s.risk_reward_ratio,
                 "signal_type": s.signal_type,
+                "entry_price": s.entry_price,
+                "stop_loss": s.stop_loss,
+                "take_profit": s.take_profit,
                 "executed": s.executed
             }
             for s in signals
@@ -276,6 +282,7 @@ async def get_config():
         "risk_per_trade_pct": settings.risk_per_trade_pct,
         "min_risk_reward_ratio": settings.min_risk_reward_ratio,
         "confidence_threshold": settings.confidence_threshold,
+        "stop_loss_pct": settings.stop_loss_pct,
         "paper_trading": settings.is_paper_trading(),
     }
 
