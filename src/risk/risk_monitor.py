@@ -1,7 +1,7 @@
 """Risk monitoring and kill-switch implementation"""
 
 from typing import Dict, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import and_, func
 
 from src.config.settings import settings
@@ -31,7 +31,7 @@ class RiskMonitor:
             Tuple of (limit_reached, current_loss_pct)
         """
         try:
-            today = datetime.utcnow().date()
+            today = datetime.now(timezone.utc).date()
             
             with get_db() as db:
                 # Get today's closed trades
@@ -156,7 +156,8 @@ class RiskMonitor:
         try:
             with get_db() as db:
                 recent_trades = db.query(Trade).filter(
-                    Trade.status == TradeStatus.CLOSED
+                    Trade.status == TradeStatus.CLOSED,
+                    Trade.exit_timestamp.isnot(None)
                 ).order_by(Trade.exit_timestamp.desc()).limit(10).all()
                 
                 consecutive_losses = 0

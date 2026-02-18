@@ -2,17 +2,17 @@
 
 import asyncio
 from typing import Dict, List
-from datetime import datetime
+from datetime import datetime, timezone
 import pandas as pd
 
 from src.config.settings import settings
 from src.data.exchange_client import binance_client
 from src.data.market_data import MarketDataManager
 from src.signals.signal_generator import signal_generator
-from src.signals.scoring_engine import scoring_engine
 from src.execution.trade_executor import trade_executor
 from src.risk.risk_monitor import risk_monitor
 from src.risk.stop_loss import stop_loss_manager
+from src.indicators.volatility import calculate_atr
 from src.database.connection import get_db
 from src.database.models import Position
 from src.utils.logger import main_logger
@@ -24,6 +24,7 @@ class TradingBot:
     
     def __init__(self):
         self.running = False
+        self.capital = 0.0
         self.trading_pairs = settings.get_trading_pairs()
         self.timeframes = settings.get_timeframes()
         self.market_data_manager = MarketDataManager()
@@ -62,6 +63,7 @@ class TradingBot:
             try:
                 # Update capital
                 await trade_executor.update_capital()
+                self.capital = trade_executor.capital
                 
                 # Process each trading pair
                 for symbol in self.trading_pairs:
@@ -158,17 +160,18 @@ class TradingBot:
                 positions = db.query(Position).all()
                 
                 for position in positions:
-                    await self.update_single_position(position)
+                    await self.update_single_position(position, db)
                     
         except Exception as e:
             main_logger.error(f"Error updating positions: {e}")
     
-    async def update_single_position(self, position: Position):
+    async def update_single_position(self, position: Position, db=None):
         """
         Update a single position
         
         Args:
             position: Position to update
+            db: Optional database session (reuse from caller to avoid nested sessions)
         """
         try:
             # Fetch current price
@@ -212,10 +215,8 @@ class TradingBot:
                 return
             
             # Update trailing stop
-            # Fetch ATR for trailing calculation
             df = await binance_client.fetch_ohlcv(position.symbol, '5m', limit=50)
             if not df.empty:
-                from src.indicators.volatility import calculate_atr
                 atr = calculate_atr(df).iloc[-1]
                 
                 stop_update = stop_loss_manager.update_trailing_stop(
@@ -232,10 +233,16 @@ class TradingBot:
                         f"Stop updated for {position.symbol}: {stop_update['new_stop']:.2f}"
                     )
             
-            # Save updates
-            with get_db() as db:
-                db.merge(position)
-                db.commit()
+            # Save updates — reuse caller's session if provided, else open a new one
+            def _save(session):
+                session.merge(position)
+                session.commit()
+            
+            if db is not None:
+                _save(db)
+            else:
+                with get_db() as new_db:
+                    _save(new_db)
                 
         except Exception as e:
             main_logger.error(f"Error updating position {position.symbol}: {e}")

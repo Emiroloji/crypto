@@ -234,3 +234,125 @@ def get_volume_signals(df: pd.DataFrame, order_book_data: Optional[dict] = None)
     signals['volume_score'] = np.clip(volume_score, -100, 100)
     
     return signals
+
+
+# ─── OBV and VWAP ────────────────────────────────────────────────────────────
+
+def calculate_obv(df: pd.DataFrame) -> pd.Series:
+    """
+    Calculate On-Balance Volume (OBV)
+
+    Args:
+        df: DataFrame with OHLCV data
+
+    Returns:
+        OBV Series
+    """
+    if len(df) < 2:
+        return pd.Series([0] * len(df))
+
+    obv = pd.Series(0.0, index=df.index)
+    obv.iloc[0] = df['volume'].iloc[0]
+
+    for i in range(1, len(df)):
+        if df['close'].iloc[i] > df['close'].iloc[i - 1]:
+            obv.iloc[i] = obv.iloc[i - 1] + df['volume'].iloc[i]
+        elif df['close'].iloc[i] < df['close'].iloc[i - 1]:
+            obv.iloc[i] = obv.iloc[i - 1] - df['volume'].iloc[i]
+        else:
+            obv.iloc[i] = obv.iloc[i - 1]
+
+    return obv
+
+
+def calculate_obv_score(df: pd.DataFrame, obv: pd.Series, direction: str) -> float:
+    """
+    Score based on OBV trend
+
+    Args:
+        df: DataFrame with OHLCV data
+        obv: OBV Series from calculate_obv
+        direction: Trade direction ('LONG' or 'SHORT')
+
+    Returns:
+        Score 0-100
+    """
+    if len(obv) < 20:
+        return 50.0
+
+    recent_obv = obv.tail(20)
+    x = np.arange(len(recent_obv))
+
+    if len(x) > 1:
+        slope = np.polyfit(x, recent_obv.values, 1)[0]
+        avg_obv = abs(recent_obv.mean())
+        normalized_slope = (slope / avg_obv) * 100 if avg_obv > 0 else 0
+    else:
+        normalized_slope = 0
+
+    if direction.upper() == 'LONG':
+        score = min(100.0, 50 + normalized_slope * 10) if normalized_slope > 0 else max(0.0, 50 + normalized_slope * 10)
+    else:
+        score = min(100.0, 50 - normalized_slope * 10) if normalized_slope < 0 else max(0.0, 50 - normalized_slope * 10)
+
+    return float(max(0.0, min(100.0, score)))
+
+
+def calculate_vwap(df: pd.DataFrame) -> pd.Series:
+    """
+    Calculate Volume Weighted Average Price (VWAP)
+
+    Args:
+        df: DataFrame with OHLCV data
+
+    Returns:
+        VWAP Series
+    """
+    if len(df) == 0:
+        return pd.Series([0] * len(df))
+
+    typical_price = (df['high'] + df['low'] + df['close']) / 3
+    cumulative_tp_volume = (typical_price * df['volume']).cumsum()
+    cumulative_volume = df['volume'].cumsum()
+    vwap = cumulative_tp_volume / cumulative_volume
+
+    return vwap.fillna(0)
+
+
+def calculate_vwap_score(current_price: float, vwap_value: float, direction: str) -> float:
+    """
+    Score based on price position relative to VWAP
+
+    Args:
+        current_price: Current market price
+        vwap_value: Current VWAP value
+        direction: Trade direction ('LONG' or 'SHORT')
+
+    Returns:
+        Score 0-100
+    """
+    if vwap_value == 0:
+        return 50.0
+
+    deviation = (current_price - vwap_value) / vwap_value * 100
+
+    if direction.upper() == 'LONG':
+        if deviation < -2:
+            score = 100.0
+        elif deviation < 0:
+            score = 100.0 - abs(deviation) * 25
+        elif deviation < 2:
+            score = 50.0 - deviation * 25
+        else:
+            score = 0.0
+    else:
+        if deviation > 2:
+            score = 100.0
+        elif deviation > 0:
+            score = 100.0 - deviation * 25
+        elif deviation > -2:
+            score = 50.0 + abs(deviation) * 25
+        else:
+            score = 0.0
+
+    return float(max(0.0, min(100.0, score)))

@@ -1,9 +1,8 @@
 """Trade execution orchestrator"""
 
 from typing import Dict, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
-from src.signals.signal_generator import signal_generator
 from src.signals.scoring_engine import scoring_engine
 from src.risk.position_sizer import position_sizer
 from src.risk.risk_monitor import risk_monitor
@@ -171,7 +170,7 @@ class TradeExecutor:
                     symbol=signal_data['symbol'],
                     direction=signal_data['direction'],
                     status=TradeStatus.OPEN,
-                    entry_timestamp=datetime.utcnow(),
+                    entry_timestamp=datetime.now(timezone.utc),
                     entry_price=order.get('price', signal_data['entry_price']),
                     position_size=position_info['position_size'],
                     leverage=int(position_info['leverage']),
@@ -211,7 +210,7 @@ class TradeExecutor:
                     unrealized_pnl=0.0,
                     stop_loss=signal_data['stop_loss'],
                     take_profit=signal_data['take_profit'],
-                    opened_at=datetime.utcnow(),
+                    opened_at=datetime.now(timezone.utc),
                 )
                 
                 db.add(position)
@@ -260,13 +259,16 @@ class TradeExecutor:
                 )
                 
                 exit_price = order.get('price', position.current_price)
+                fee_rate = 0.0004  # 0.04% taker fee (Binance default)
+                exit_fee = exit_price * position.position_size * fee_rate
                 
-                # Calculate P&L
+                # Calculate P&L (net of fees)
                 if position.direction == TradeDirection.LONG:
-                    pnl = (exit_price - position.entry_price) * position.position_size
+                    gross_pnl = (exit_price - position.entry_price) * position.position_size
                 else:
-                    pnl = (position.entry_price - exit_price) * position.position_size
+                    gross_pnl = (position.entry_price - exit_price) * position.position_size
                 
+                pnl = gross_pnl - exit_fee
                 pnl_percent = (pnl / (position.entry_price * position.position_size)) * 100
                 
                 # Update trade record
@@ -277,10 +279,11 @@ class TradeExecutor:
                 
                 if trade:
                     trade.status = TradeStatus.CLOSED
-                    trade.exit_timestamp = datetime.utcnow()
+                    trade.exit_timestamp = datetime.now(timezone.utc)
                     trade.exit_price = exit_price
                     trade.pnl = pnl
                     trade.pnl_percent = pnl_percent
+                    trade.fees = exit_fee
                     trade.notes = f"Closed: {reason}"
                 
                 # Delete position
@@ -288,7 +291,7 @@ class TradeExecutor:
                 db.commit()
                 
                 execution_logger.info(
-                    f"Position closed: {symbol} P&L: ${pnl:.2f} ({pnl_percent:.2f}%)"
+                    f"Position closed: {symbol} P&L: ${pnl:.2f} ({pnl_percent:.2f}%) Fee: ${exit_fee:.2f}"
                 )
                 
                 return True

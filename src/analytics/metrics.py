@@ -1,7 +1,7 @@
 """Performance metrics calculation"""
 
 from typing import Dict, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import numpy as np
 from sqlalchemy import and_, func
 
@@ -170,7 +170,7 @@ class PerformanceMetrics:
             Dictionary with overall statistics
         """
         try:
-            cutoff = datetime.utcnow() - timedelta(days=days)
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
             
             with get_db() as db:
                 # Get all closed trades in period

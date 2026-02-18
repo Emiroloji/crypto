@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     telegram_bot_token: str = Field(default="", description="Telegram bot token")
     telegram_chat_id: str = Field(default="", description="Telegram chat ID for alerts")
     
+    # CORS
+    allowed_origins: List[str] = Field(
+        default=["http://localhost:3000", "http://localhost:8000"],
+        description="Allowed CORS origins (set to ['*'] only for development)"
+    )
+    
     @field_validator("trading_pairs")
     def parse_trading_pairs(cls, v: str) -> List[str]:
         """Parse comma-separated trading pairs"""

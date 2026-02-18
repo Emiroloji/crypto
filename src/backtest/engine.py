@@ -5,7 +5,7 @@ Simple Backtesting Engine for Crypto Trading Strategies
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Any, Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from src.utils.logger import execution_logger as logger
 
@@ -63,7 +63,9 @@ class BacktestEngine:
                     unrealized_pnl = (current_price - position.entry_price) * position.amount
                 else:
                     unrealized_pnl = (position.entry_price - current_price) * position.amount
-                current_value += unrealized_pnl
+                # Deduct entry fee already paid so equity curve is accurate
+                entry_fee_paid = position.entry_price * position.amount * self.fee_rate
+                current_value += unrealized_pnl - entry_fee_paid
                 
             self.equity_curve.append({
                 'timestamp': df.iloc[i]['timestamp'],
@@ -110,8 +112,23 @@ class BacktestEngine:
                     position = None
                     
                 elif position is None:
-                    # Open SHORT (if supported)
-                    pass 
+                    # Open SHORT
+                    amount_to_invest = min(self.current_capital, signal.get('amount_usd', self.current_capital * 0.95))
+                    fee = amount_to_invest * self.fee_rate
+                    net_investment = amount_to_invest - fee
+                    amount = net_investment / current_price
+                    
+                    self.current_capital -= amount_to_invest
+                    
+                    position = Trade(
+                        symbol=symbol,
+                        entry_price=current_price,
+                        exit_price=None,
+                        amount=amount,
+                        side='SHORT',
+                        entry_time=current_time,
+                        exit_time=None
+                    )
 
         # Close any open position at the end
         if position:

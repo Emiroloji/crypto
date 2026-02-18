@@ -10,8 +10,9 @@ class ScoringEngine:
     """Validate and score trading signals"""
     
     def __init__(self):
-        self.confidence_threshold = settings.confidence_threshold
-        self.min_risk_reward = settings.min_risk_reward_ratio
+        # NOTE: thresholds are read from settings at call time (not frozen here)
+        # so that runtime configuration changes are respected.
+        pass
     
     def validate_signal(self, signal_data: Dict) -> tuple[bool, str]:
         """
@@ -26,15 +27,19 @@ class ScoringEngine:
         if not signal_data:
             return False, "No signal data"
         
+        # Read thresholds fresh from settings each call
+        confidence_threshold = settings.confidence_threshold
+        min_risk_reward = settings.min_risk_reward_ratio
+        
         # Check confidence threshold
         confidence = signal_data.get('confidence_score', 0)
-        if confidence < self.confidence_threshold:
-            return False, f"Confidence {confidence:.1f}% below threshold {self.confidence_threshold}%"
+        if confidence < confidence_threshold:
+            return False, f"Confidence {confidence:.1f}% below threshold {confidence_threshold}%"
         
         # Check risk/reward ratio
         rr_ratio = signal_data.get('risk_reward_ratio', 0)
-        if rr_ratio < self.min_risk_reward:
-            return False, f"R/R {rr_ratio:.2f} below minimum {self.min_risk_reward}"
+        if rr_ratio < min_risk_reward:
+            return False, f"R/R {rr_ratio:.2f} below minimum {min_risk_reward}"
         
         # Check for valid direction
         if not signal_data.get('direction'):

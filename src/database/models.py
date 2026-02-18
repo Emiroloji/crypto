@@ -1,6 +1,6 @@
 """SQLAlchemy ORM models for database tables"""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, DateTime,
     Text, JSON, ForeignKey, Index, Enum as SQLEnum
@@ -38,7 +38,7 @@ class MarketData(Base):
     low = Column(Float, nullable=False)
     close = Column(Float, nullable=False)
     volume = Column(Float, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     __table_args__ = (
         Index('idx_symbol_timeframe_timestamp', 'symbol', 'timeframe', 'timestamp'),
@@ -56,7 +56,7 @@ class OrderBook(Base):
     asks = Column(JSON, nullable=False)  # [[price, quantity], ...]
     bid_ask_spread = Column(Float)
     imbalance_ratio = Column(Float)  # bid_volume / ask_volume
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class Trade(Base):
@@ -92,8 +92,8 @@ class Trade(Base):
     signal_id = Column(Integer, ForeignKey("signals.id"))
     exchange_order_id = Column(String(100))
     notes = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
     signal = relationship("Signal", back_populates="trades")
@@ -115,7 +115,7 @@ class Position(Base):
     take_profit = Column(Float, nullable=False)
     trailing_stop = Column(Float)
     opened_at = Column(DateTime, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class Signal(Base):
@@ -153,7 +153,7 @@ class Signal(Base):
     signal_type = Column(String(50))  # breakout, pullback, reversal, news
     market_regime = Column(String(20))  # trending, ranging, volatile
     notes = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     # Relationships
     trades = relationship("Trade", back_populates="signal")
@@ -190,7 +190,7 @@ class Performance(Base):
     ending_capital = Column(Float, nullable=False)
     peak_capital = Column(Float, nullable=False)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class SentimentData(Base):
@@ -212,7 +212,7 @@ class SentimentData(Base):
     author = Column(String(100))
     engagement_score = Column(Float)  # likes, retweets, upvotes
     
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     __table_args__ = (
         Index('idx_symbol_timestamp', 'symbol', 'timestamp'),
@@ -242,7 +242,7 @@ class OnChainData(Base):
     
     # Metadata
     data_source = Column(String(50))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class SystemState(Base):
@@ -252,4 +252,4 @@ class SystemState(Base):
     id = Column(Integer, primary_key=True, index=True)
     key = Column(String(100), nullable=False, unique=True, index=True)
     value = Column(JSON, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

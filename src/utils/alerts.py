@@ -61,22 +61,26 @@ class AlertManager:
     def send_alert_sync(self, message: str, priority: str = "INFO") -> bool:
         """
         Synchronous wrapper for send_alert
-        
+
         Args:
             message: Alert message
             priority: Priority level
-            
+
         Returns:
             Success status
         """
+        import concurrent.futures
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Create a new task if loop is already running
-                asyncio.create_task(self.send_alert(message, priority))
-                return True
-            else:
-                return loop.run_until_complete(self.send_alert(message, priority))
+            loop = asyncio.get_running_loop()
+            # Loop is already running (e.g. inside an async context) — schedule as a task
+            future = asyncio.run_coroutine_threadsafe(
+                self.send_alert(message, priority), loop
+            )
+            future.result(timeout=5)
+            return True
+        except RuntimeError:
+            # No running loop — safe to use asyncio.run()
+            return asyncio.run(self.send_alert(message, priority))
         except Exception as e:
             main_logger.error(f"Failed to send alert: {e}")
             return False

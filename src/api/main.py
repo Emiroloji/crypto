@@ -1,26 +1,41 @@
 """FastAPI application"""
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from src.trading_bot import trading_bot
 from src.risk.risk_monitor import risk_monitor
-from src.database.connection import get_db
+from src.database.connection import get_db, init_db
 from src.database.models import Trade, Position, Signal, Performance
 from src.config.settings import settings
 from src.utils.logger import main_logger
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan: startup and shutdown"""
+    # Startup
+    init_db()
+    main_logger.info("API server started")
+    yield
+    # Shutdown
+    main_logger.info("API server shutting down")
+    if trading_bot.running:
+        await trading_bot.stop()
 
 # Create FastAPI app
 app = FastAPI(
     title="Crypto Trading System API",
     description="Advanced AI-powered crypto intraday trading system",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan
 )
 
 # Mount static files for frontend
@@ -28,12 +43,13 @@ static_path = Path(__file__).parent.parent.parent / "static"
 static_path.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
-# Add CORS middleware
+# Add CORS middleware — restrict in production via ALLOWED_ORIGINS env var
+_allowed_origins = getattr(settings, 'allowed_origins', ["http://localhost:3000", "http://localhost:8000"])
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -69,6 +85,7 @@ class TradeResponse(BaseModel):
     exit_price: Optional[float]
     pnl: Optional[float]
     pnl_percent: Optional[float]
+    fees: Optional[float]
     created_at: datetime
 
 
@@ -97,7 +114,7 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "version": "0.1.0"
     }
 
@@ -230,7 +247,6 @@ async def get_signals(limit: int = 20):
                 "id": s.id,
                 "symbol": s.symbol,
                 "timestamp": s.timestamp.isoformat(),
-                "created_at": s.timestamp.isoformat(),
                 "direction": s.direction.value if s.direction else None,
                 "confidence_score": s.confidence_score,
                 "risk_reward_ratio": s.risk_reward_ratio,
@@ -249,7 +265,7 @@ async def get_signals(limit: int = 20):
 async def get_performance(days: int = 30):
     """Get performance metrics"""
     with get_db() as db:
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         
         performance = db.query(Performance).filter(
             Performance.date >= cutoff
@@ -287,23 +303,7 @@ async def get_config():
     }
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize on startup"""
-    main_logger.info("API server started")
-    
-    # Initialize database
-    from src.database.connection import init_db
-    init_db()
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown"""
-    main_logger.info("API server shutting down")
-    
-    if trading_bot.running:
-        await trading_bot.stop()
+# Startup/shutdown handled by lifespan context manager above
 
 
 if __name__ == "__main__":

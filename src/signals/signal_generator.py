@@ -2,7 +2,7 @@
 
 from typing import Dict, Optional
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.indicators.trend import get_trend_signals
 from src.indicators.momentum import get_momentum_signals
@@ -14,7 +14,7 @@ from src.indicators.advanced import (
     calculate_stochastic_rsi, calculate_stochastic_rsi_score,
     calculate_ichimoku_cloud, calculate_ichimoku_score
 )
-from src.indicators.volume_indicators import (
+from src.indicators.volume import (
     calculate_obv, calculate_obv_score,
     calculate_vwap, calculate_vwap_score
 )
@@ -172,7 +172,9 @@ class SignalGenerator:
                 (orderbook_score / 100) * self.weights['order_book_imbalance'] +
                 (volatility_score / 100) * self.weights['volatility_regime'] +
                 (combined_sentiment / 100) * self.weights['sentiment_score'] +
-                (onchain_score / 100) * self.weights['onchain_data']
+                (onchain_score / 100) * self.weights['onchain_data'] +
+                (advanced_score / 100) * self.weights['advanced_indicators'] +
+                (math_score / 100) * self.weights['mathematical_models']
             ) * 100
             
             # Determine direction
@@ -216,7 +218,7 @@ class SignalGenerator:
             
             signal_data = {
                 'symbol': symbol,
-                'timestamp': datetime.utcnow(),
+                'timestamp': datetime.now(timezone.utc),
                 'direction': direction,
                 'trend_score': float(trend_score),
                 'momentum_score': float(momentum_score),
