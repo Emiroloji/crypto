@@ -139,8 +139,8 @@ class ConfigUpdate(BaseModel):
 
 
 # Mount static files for frontend (React build output)
-static_path = Path(__file__).parent.parent.parent / "static"
-static_path.mkdir(exist_ok=True)
+static_path = Path(__file__).parent.parent.parent / "frontend" / "dist"
+static_path.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
 
@@ -148,7 +148,7 @@ app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 @app.get("/", include_in_schema=False)
 async def root():
     """Serve React frontend"""
-    index_path = Path(__file__).parent.parent.parent / "static" / "index.html"
+    index_path = Path(__file__).parent.parent.parent / "frontend" / "dist" / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
     return {"message": "Trading System API", "docs": "/docs"}

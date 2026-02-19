@@ -8,7 +8,7 @@ export default defineConfig({
   // Build output goes directly into backend's /static directory
   base: '/static/',
   build: {
-    outDir: path.resolve(__dirname, '../static'),
+    outDir: path.resolve(__dirname, './dist'),
     emptyOutDir: true,        // clears old files on every build
     sourcemap: false,
     rollupOptions: {
