@@ -3,6 +3,8 @@
 from typing import Dict, Optional
 from datetime import datetime, timezone
 
+from src.config.settings import settings
+
 from src.signals.scoring_engine import scoring_engine
 from src.risk.position_sizer import position_sizer
 from src.risk.risk_monitor import risk_monitor
@@ -19,14 +21,14 @@ class TradeExecutor:
     
     def __init__(self, exchange_client=None):
         self.exchange = exchange_client or binance_client
-        self.capital = 10000.0  # Default, should be updated from account
-        self.peak_capital = 10000.0
+        self.capital = settings.initial_capital
+        self.peak_capital = settings.initial_capital
     
     async def update_capital(self):
         """Update current capital from exchange"""
         try:
             balance = await self.exchange.get_balance()
-            self.capital = balance.get('USDT', 10000.0)
+            self.capital = balance.get('USDT', settings.initial_capital)
             
             # Update peak capital
             if self.capital > self.peak_capital:
@@ -37,12 +39,13 @@ class TradeExecutor:
         except Exception as e:
             execution_logger.error(f"Error updating capital: {e}")
     
-    async def execute_signal(self, signal_data: Dict) -> Optional[int]:
+    async def execute_signal(self, signal_data: Dict, db=None) -> Optional[int]:
         """
         Execute trade from signal
         
         Args:
             signal_data: Signal information
+            db: Optional database session
             
         Returns:
             Trade ID or None
@@ -81,7 +84,7 @@ class TradeExecutor:
             )
             
             # Execute order
-            trade_id = await self._place_order(signal_data, position_info, signal_quality)
+            trade_id = await self._place_order(signal_data, position_info, signal_quality, db)
             
             if trade_id:
                 # Send alert
@@ -105,7 +108,8 @@ class TradeExecutor:
         self,
         signal_data: Dict,
         position_info: Dict,
-        signal_quality: Dict
+        signal_quality: Dict,
+        db=None
     ) -> Optional[int]:
         """
         Place order on exchange
@@ -114,6 +118,7 @@ class TradeExecutor:
             signal_data: Signal information
             position_info: Position sizing information
             signal_quality: Signal quality metrics
+            db: Optional database session
             
         Returns:
             Trade ID or None
@@ -141,7 +146,7 @@ class TradeExecutor:
             )
             
             # Save trade and position in a single transaction
-            trade_id = self._save_trade_and_position(signal_data, position_info, order)
+            trade_id = self._save_trade_and_position(signal_data, position_info, order, db)
             
             return trade_id
             
@@ -153,51 +158,58 @@ class TradeExecutor:
         self,
         signal_data: Dict,
         position_info: Dict,
-        order: Dict
+        order: Dict,
+        db=None
     ) -> Optional[int]:
         """Save trade and position in a single atomic DB transaction"""
+        
+        def _save(session):
+            signal_id = signal_data.get('signal_id')
+            entry_price = order.get('price', signal_data['entry_price'])
+            now = datetime.now(timezone.utc)
+
+            trade = Trade(
+                symbol=signal_data['symbol'],
+                direction=signal_data['direction'],
+                status=TradeStatus.OPEN,
+                entry_timestamp=now,
+                entry_price=entry_price,
+                position_size=position_info['position_size'],
+                leverage=int(position_info['leverage']),
+                stop_loss=signal_data['stop_loss'],
+                take_profit=signal_data['take_profit'],
+                signal_id=signal_id,
+                exchange_order_id=order.get('id'),
+            )
+            session.add(trade)
+
+            position = Position(
+                symbol=signal_data['symbol'],
+                direction=signal_data['direction'],
+                entry_price=entry_price,
+                current_price=entry_price,
+                position_size=position_info['position_size'],
+                leverage=int(position_info['leverage']),
+                unrealized_pnl=0.0,
+                stop_loss=signal_data['stop_loss'],
+                take_profit=signal_data['take_profit'],
+                opened_at=now,
+            )
+            session.add(position)
+            session.commit()
+            session.refresh(trade)
+            
+            execution_logger.info(
+                f"Trade {trade.id} and position saved for {signal_data['symbol']}"
+            )
+            return trade.id
+
         try:
-            with get_db() as db:
-                signal_id = signal_data.get('signal_id')
-                entry_price = order.get('price', signal_data['entry_price'])
-                now = datetime.now(timezone.utc)
-
-                trade = Trade(
-                    symbol=signal_data['symbol'],
-                    direction=signal_data['direction'],
-                    status=TradeStatus.OPEN,
-                    entry_timestamp=now,
-                    entry_price=entry_price,
-                    position_size=position_info['position_size'],
-                    leverage=int(position_info['leverage']),
-                    stop_loss=signal_data['stop_loss'],
-                    take_profit=signal_data['take_profit'],
-                    signal_id=signal_id,
-                    exchange_order_id=order.get('id'),
-                )
-                db.add(trade)
-
-                position = Position(
-                    symbol=signal_data['symbol'],
-                    direction=signal_data['direction'],
-                    entry_price=entry_price,
-                    current_price=entry_price,
-                    position_size=position_info['position_size'],
-                    leverage=int(position_info['leverage']),
-                    unrealized_pnl=0.0,
-                    stop_loss=signal_data['stop_loss'],
-                    take_profit=signal_data['take_profit'],
-                    opened_at=now,
-                )
-                db.add(position)
-
-                db.commit()
-                db.refresh(trade)
-
-                execution_logger.info(
-                    f"Trade {trade.id} and position saved for {signal_data['symbol']}"
-                )
-                return trade.id
+            if db:
+                return _save(db)
+            else:
+                with get_db() as new_db:
+                    return _save(new_db)
 
         except Exception as e:
             execution_logger.error(f"Error saving trade and position: {e}")
@@ -241,7 +253,7 @@ class TradeExecutor:
                 )
                 
                 exit_price = order.get('price', position.current_price)
-                fee_rate = 0.0004  # 0.04% taker fee (Binance default)
+                fee_rate = settings.taker_fee_rate
                 entry_fee = position.entry_price * position.position_size * fee_rate
                 exit_fee = exit_price * position.position_size * fee_rate
                 total_fees = entry_fee + exit_fee

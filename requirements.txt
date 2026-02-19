@@ -15,28 +15,20 @@ numpy>=1.26.0
 ta-lib==0.4.28
 scipy==1.11.4
 
-# Machine Learning
+# Machine Learning & AI (Optional)
 scikit-learn==1.4.0
-torch==2.1.2
-transformers==4.36.2
-stable-baselines3==2.2.1
 
 # Database
 sqlalchemy==2.0.25
 psycopg2-binary==2.9.9
 alembic==1.13.1
 
-# Caching & Queue
+# Caching
 redis==5.0.1
-celery==5.3.6
 
 # NLP & Sentiment
-tweepy==4.14.0
-praw==7.7.1
-python-telegram-bot==20.7
-beautifulsoup4==4.12.3
-newspaper3k==0.2.8
 vaderSentiment==3.3.2
+beautifulsoup4==4.12.3
 
 # Monitoring & Logging
 prometheus-client==0.19.0

@@ -73,12 +73,13 @@ class TradingBot:
                 await trade_executor.update_capital()
                 self.capital = trade_executor.capital
                 
-                # Process each trading pair
-                for symbol in self.trading_pairs:
-                    await self.process_symbol(symbol)
-                
-                # Update open positions
-                await self.update_positions()
+                with get_db() as db:
+                    # Process each trading pair
+                    for symbol in self.trading_pairs:
+                        await self.process_symbol(symbol, db)
+                    
+                    # Update open positions
+                    await self.update_positions(db)
                 
                 # Wait before next iteration
                 await asyncio.sleep(60)  # Check every minute
@@ -87,12 +88,13 @@ class TradingBot:
                 main_logger.error(f"Error in main loop: {e}")
                 await asyncio.sleep(60)
     
-    async def process_symbol(self, symbol: str):
+    async def process_symbol(self, symbol: str, db=None):
         """
         Process a single trading symbol
         
         Args:
             symbol: Trading pair to process
+            db: Optional database session
         """
         try:
             main_logger.info(f"Processing {symbol}...")
@@ -109,11 +111,11 @@ class TradingBot:
                 return
             
             # Save to database
-            self.market_data_manager.save_ohlcv(df)
+            self.market_data_manager.save_ohlcv(df, db)
             
             # Fetch order book
             order_book = await binance_client.fetch_order_book(symbol, limit=20)
-            self.market_data_manager.save_order_book(order_book)
+            self.market_data_manager.save_order_book(order_book, db)
             
             # Generate signal
             signal_data = signal_generator.generate_signal(
@@ -136,7 +138,7 @@ class TradingBot:
             )
             
             # Save signal
-            signal_id = signal_generator.save_signal(signal_data)
+            signal_id = signal_generator.save_signal(signal_data, db)
             main_logger.info(f"Signal save result for {symbol}: ID={signal_id}")
             
             if signal_id:
@@ -153,7 +155,7 @@ class TradingBot:
                 })
             
             # Execute if valid
-            trade_id = await trade_executor.execute_signal(signal_data)
+            trade_id = await trade_executor.execute_signal(signal_data, db)
             
             if trade_id:
                 main_logger.info(f"Trade executed: ID {trade_id}")
@@ -161,14 +163,19 @@ class TradingBot:
         except Exception as e:
             main_logger.error(f"Error processing {symbol}: {e}")
     
-    async def update_positions(self):
+    async def update_positions(self, db=None):
         """Update all open positions"""
         try:
-            with get_db() as db:
+            # Use provided db or new session
+            if db:
                 positions = db.query(Position).all()
-                
                 for position in positions:
                     await self.update_single_position(position, db)
+            else:
+                with get_db() as new_db:
+                    positions = new_db.query(Position).all()
+                    for position in positions:
+                        await self.update_single_position(position, new_db)
                     
         except Exception as e:
             main_logger.error(f"Error updating positions: {e}")

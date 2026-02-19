@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     environment: str = Field(default="development", description="Environment: development, staging, production")
     log_level: str = Field(default="INFO", description="Logging level")
     enable_paper_trading: bool = Field(default=True, description="Enable paper trading mode")
+    api_key: str = Field(default="", description="API Key for securing endpoints (leave empty to disable)")
     
     # Exchange API Keys
     binance_api_key: str = Field(default="", description="Binance API key")
@@ -46,6 +47,11 @@ class Settings(BaseSettings):
     stop_loss_pct: float = Field(default=2.0, ge=0.5, le=10.0, description="Default stop loss percentage")
     min_risk_reward_ratio: float = Field(default=2.5, ge=1.0, le=10.0, description="Minimum risk/reward ratio")
     confidence_threshold: float = Field(default=75.0, ge=50.0, le=100.0, description="Minimum confidence score for trade")
+    
+    # Trading Constants
+    maker_fee_rate: float = Field(default=0.0002, description="Maker fee rate (0.02%)")
+    taker_fee_rate: float = Field(default=0.0004, description="Taker fee rate (0.04%)")
+    initial_capital: float = Field(default=10000.0, description="Initial capital for backtesting/paper trading")
     
     # Social Media APIs
     twitter_api_key: str = Field(default="", description="Twitter API key")

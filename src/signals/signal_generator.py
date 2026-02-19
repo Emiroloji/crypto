@@ -293,12 +293,13 @@ class SignalGenerator:
         
         return 'other'
     
-    def save_signal(self, signal_data: Dict) -> Optional[int]:
+    def save_signal(self, signal_data: Dict, db=None) -> Optional[int]:
         """
         Save signal to database
         
         Args:
             signal_data: Signal information
+            db: Optional database session
             
         Returns:
             Signal ID or None
@@ -306,33 +307,39 @@ class SignalGenerator:
         if not signal_data or not signal_data.get('direction'):
             return None
         
+        def _save(session):
+            signal = Signal(
+                symbol=signal_data['symbol'],
+                timestamp=signal_data['timestamp'],
+                direction=signal_data['direction'],
+                trend_score=signal_data['trend_score'],
+                momentum_score=signal_data['momentum_score'],
+                volume_score=signal_data['volume_score'],
+                orderbook_score=signal_data['orderbook_score'],
+                volatility_score=signal_data['volatility_score'],
+                sentiment_score=signal_data['sentiment_score'],
+                onchain_score=signal_data['onchain_score'],
+                confidence_score=signal_data['confidence_score'],
+                risk_reward_ratio=signal_data['risk_reward_ratio'],
+                entry_price=signal_data['entry_price'],
+                stop_loss=signal_data['stop_loss'],
+                take_profit=signal_data['take_profit'],
+                signal_type=signal_data['signal_type'],
+                market_regime=signal_data['market_regime'],
+            )
+            session.add(signal)
+            session.commit()
+            session.refresh(signal)
+            
+            signal_logger.info(f"Saved signal ID {signal.id} for {signal_data['symbol']}")
+            return signal.id
+
         try:
-            with get_db() as db:
-                signal = Signal(
-                    symbol=signal_data['symbol'],
-                    timestamp=signal_data['timestamp'],
-                    direction=signal_data['direction'],
-                    trend_score=signal_data['trend_score'],
-                    momentum_score=signal_data['momentum_score'],
-                    volume_score=signal_data['volume_score'],
-                    orderbook_score=signal_data['orderbook_score'],
-                    volatility_score=signal_data['volatility_score'],
-                    sentiment_score=signal_data['sentiment_score'],
-                    onchain_score=signal_data['onchain_score'],
-                    confidence_score=signal_data['confidence_score'],
-                    risk_reward_ratio=signal_data['risk_reward_ratio'],
-                    entry_price=signal_data['entry_price'],
-                    stop_loss=signal_data['stop_loss'],
-                    take_profit=signal_data['take_profit'],
-                    signal_type=signal_data['signal_type'],
-                    market_regime=signal_data['market_regime'],
-                )
-                db.add(signal)
-                db.commit()
-                db.refresh(signal)
-                
-                signal_logger.info(f"Saved signal ID {signal.id} for {signal_data['symbol']}")
-                return signal.id
+            if db:
+                return _save(db)
+            else:
+                with get_db() as new_db:
+                    return _save(new_db)
                 
         except Exception as e:
             signal_logger.error(f"Error saving signal: {e}")

@@ -17,6 +17,8 @@ from src.database.connection import get_db, init_db
 from src.database.models import Trade, Position, Signal, Performance
 from src.config.settings import settings
 from src.utils.logger import main_logger
+from src.api.auth import get_api_key
+from fastapi import Depends
 
 
 @asynccontextmanager
@@ -183,7 +185,7 @@ async def get_status():
 
 
 # Start/Stop bot
-@app.post("/bot/start")
+@app.post("/bot/start", dependencies=[Depends(get_api_key)])
 async def start_bot(background_tasks: BackgroundTasks):
     """Start the trading bot"""
     if trading_bot.running:
@@ -193,7 +195,7 @@ async def start_bot(background_tasks: BackgroundTasks):
     return {"message": "Trading bot başlatıldı"}
 
 
-@app.post("/bot/stop")
+@app.post("/bot/stop", dependencies=[Depends(get_api_key)])
 async def stop_bot():
     """Stop the trading bot"""
     if not trading_bot.running:
@@ -204,14 +206,14 @@ async def stop_bot():
 
 
 # Kill-switch
-@app.post("/killswitch/activate")
+@app.post("/killswitch/activate", dependencies=[Depends(get_api_key)])
 async def activate_killswitch():
     """Manually activate kill-switch"""
     risk_monitor.activate_kill_switch(-999.0)
     return {"message": "Kill-switch aktif edildi"}
 
 
-@app.post("/killswitch/deactivate")
+@app.post("/killswitch/deactivate", dependencies=[Depends(get_api_key)])
 async def deactivate_killswitch():
     """Manually deactivate kill-switch"""
     risk_monitor.deactivate_kill_switch()
@@ -242,7 +244,7 @@ async def get_positions():
         ]
 
 
-@app.post("/positions/{symbol}/close")
+@app.post("/positions/{symbol}/close", dependencies=[Depends(get_api_key)])
 async def close_position(symbol: str):
     """Close a specific position"""
     success = await trade_executor.close_position(symbol, "manual")
@@ -356,11 +358,26 @@ async def get_performance_summary(days: int = 30):
     with get_db() as db:
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         
-        rows = db.query(Performance).filter(
+        # Aggregate query
+        result = db.query(
+            func.sum(Performance.total_trades).label('total_trades'),
+            func.sum(Performance.winning_trades).label('winning_trades'),
+            func.sum(Performance.losing_trades).label('losing_trades'),
+            func.sum(Performance.net_pnl).label('net_pnl'),
+            func.sum(Performance.fees_paid).label('total_fees'),
+            func.sum(Performance.gross_profit).label('total_gross_profit'),
+            func.sum(Performance.gross_loss).label('total_gross_loss'),
+            func.max(Performance.max_drawdown).label('max_drawdown'),
+            func.max(Performance.net_pnl).label('best_day_pnl'),
+            func.min(Performance.net_pnl).label('worst_day_pnl'),
+            func.avg(Performance.sharpe_ratio).label('avg_sharpe'),
+            func.count(Performance.id).label('days_count')
+        ).filter(
             Performance.date >= cutoff
-        ).all()
+        ).first()
 
-        if not rows:
+        days_count = result.days_count or 0
+        if days_count == 0:
             return PerformanceSummary(
                 total_trades=0, winning_trades=0, losing_trades=0,
                 win_rate=0.0, net_pnl=0.0, total_fees=0.0,
@@ -368,25 +385,22 @@ async def get_performance_summary(days: int = 30):
                 best_day_pnl=0.0, worst_day_pnl=0.0, avg_daily_pnl=0.0,
             )
 
-        total_trades = sum(r.total_trades for r in rows)
-        winning_trades = sum(r.winning_trades for r in rows)
-        losing_trades = sum(r.losing_trades for r in rows)
+        total_trades = result.total_trades or 0
+        winning_trades = result.winning_trades or 0
+        losing_trades = result.losing_trades or 0
         win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0.0
-        net_pnl = sum(r.net_pnl for r in rows)
-        total_fees = sum(r.fees_paid for r in rows)
-        max_drawdown = max(r.max_drawdown for r in rows)
-        pnls = [r.net_pnl for r in rows]
-        best_day_pnl = max(pnls) if pnls else 0.0
-        worst_day_pnl = min(pnls) if pnls else 0.0
-        avg_daily_pnl = (net_pnl / len(rows)) if rows else 0.0
+        net_pnl = result.net_pnl or 0.0
+        total_fees = result.total_fees or 0.0
+        max_drawdown = result.max_drawdown or 0.0
+        best_day_pnl = result.best_day_pnl or 0.0
+        worst_day_pnl = result.worst_day_pnl or 0.0
+        avg_daily_pnl = (net_pnl / days_count) if days_count > 0 else 0.0
 
-        # Weighted average sharpe from rows that have it
-        sharpe_rows = [r for r in rows if r.sharpe_ratio is not None]
-        sharpe_ratio = (sum(r.sharpe_ratio for r in sharpe_rows) / len(sharpe_rows)) if sharpe_rows else None
-
-        # Profit factor: gross_profit / abs(gross_loss)
-        total_gross_profit = sum(r.gross_profit for r in rows)
-        total_gross_loss = sum(r.gross_loss for r in rows)
+        sharpe_ratio = result.avg_sharpe
+        
+        # Profit factor
+        total_gross_profit = result.total_gross_profit or 0.0
+        total_gross_loss = result.total_gross_loss or 0.0
         profit_factor = (total_gross_profit / abs(total_gross_loss)) if total_gross_loss != 0 else None
 
         return PerformanceSummary(
@@ -427,7 +441,7 @@ async def get_config():
 
 
 # Configuration - POST (update runtime settings)
-@app.post("/config")
+@app.post("/config", dependencies=[Depends(get_api_key)])
 async def update_config(update: ConfigUpdate):
     """Update runtime configuration (in-memory only; persisted settings require .env restart)"""
     updated = {}
