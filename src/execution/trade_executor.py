@@ -387,6 +387,8 @@ class TradeExecutor:
                 
                 # Reduce position size
                 position.position_size -= amount_to_close
+                if trade_record:
+                    trade_record.position_size -= amount_to_close
                 db.commit()
                 
                 execution_logger.info(

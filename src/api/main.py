@@ -15,6 +15,7 @@ from src.execution.trade_executor import trade_executor
 from src.risk.risk_monitor import risk_monitor
 from src.database.connection import get_db, init_db
 from src.database.models import Trade, Position, Signal, Performance
+from sqlalchemy import func
 from src.config.settings import settings
 from src.utils.logger import main_logger
 from src.api.auth import get_api_key
@@ -312,7 +313,6 @@ async def get_signals(limit: int = 50):
                 "orderbook_score": s.orderbook_score,
                 "volatility_score": s.volatility_score,
                 "sentiment_score": s.sentiment_score,
-                "onchain_score": s.onchain_score,
             }
             for s in signals
         ]
