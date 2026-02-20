@@ -40,7 +40,7 @@ class SignalGenerator:
     def __init__(self):
         pass  # weights are read from SIGNAL_WEIGHTS at call time
     
-    def generate_signal(
+    async def generate_signal(
         self,
         symbol: str,
         df: pd.DataFrame,
@@ -115,9 +115,7 @@ class SignalGenerator:
             # Volatility Forecasting
             vol_forecast = forecast_volatility_simple(df, period=20, forecast_days=5)
             
-            # Fear & Greed Index (sentiment)
-            fear_greed_data = sentiment_client.get_fear_greed_index()
-            fear_greed_value = fear_greed_data['value'] if fear_greed_data else None
+            # We no longer fetch Fear & Greed locally to avoid rate limits and blocking
             
             # Determine preliminary direction for advanced scoring
             prelim_confidence = (
@@ -155,20 +153,19 @@ class SignalGenerator:
             # Calculate volatility score
             volatility_forecast_score = calculate_volatility_score(vol_forecast, prelim_direction)
             
-            # Calculate sentiment score from Fear & Greed
-            sentiment_fg_score = sentiment_client.calculate_sentiment_score(fear_greed_value, prelim_direction)
+            # Adjust sentiment to be directional based on prelim_direction
+            # We receive `sentiment_score` 0-100 (where 100 is max bullish).
+            if prelim_direction == 'SHORT':
+                combined_sentiment = 100.0 - sentiment_score
+            else:
+                combined_sentiment = sentiment_score
             
-            # Calculate news sentiment score
-            news_sentiment_score = news_client.calculate_news_sentiment_score(symbol.split('/')[0], prelim_direction)
             
             # Combined advanced indicators score (average of all 6)
             advanced_score = (fib_score + adx_score + stoch_rsi_score + obv_score + vwap_score + ichimoku_score) / 6
             
             # Combined mathematical models score (average of 4)
             math_score = (regression_score + sr_score + correlation_score + volatility_forecast_score) / 4
-            
-            # Combined sentiment score (Fear & Greed 60% + News 40%)
-            combined_sentiment = (sentiment_fg_score * 0.6 + news_sentiment_score * 0.4)
             
             # Calculate weighted confidence score with ALL components
             confidence_score = (
@@ -231,7 +228,7 @@ class SignalGenerator:
                 'volume_score': float(volume_score),
                 'orderbook_score': float(orderbook_score),
                 'volatility_score': float(volatility_score),
-                'sentiment_score': float(sentiment_score),
+                'sentiment_score': float(combined_sentiment),
                 'onchain_score': float(onchain_score),
                 'confidence_score': float(abs(confidence_score)),
                 'risk_reward_ratio': float(risk_reward_ratio),

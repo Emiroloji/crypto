@@ -23,10 +23,11 @@ class Trade:
     status: str = 'OPEN'  # OPEN, CLOSED
 
 class BacktestEngine:
-    def __init__(self, initial_capital: float = 10000.0, fee_rate: float = 0.001):
+    def __init__(self, initial_capital: float = 10000.0, fee_rate: float = 0.001, slippage_rate: float = 0.001):
         self.initial_capital = initial_capital
         self.current_capital = initial_capital
         self.fee_rate = fee_rate
+        self.slippage_rate = slippage_rate
         self.trades: List[Trade] = []
         self.equity_curve: List[Dict] = []
         
@@ -81,18 +82,20 @@ class BacktestEngine:
             current_time = df.iloc[i]['timestamp']
             
             if signal['action'] == 'BUY':
+                buy_price = current_price * (1 + self.slippage_rate)
+                
                 if position is None:
                     # Open LONG
                     amount_to_invest = min(self.current_capital, signal.get('amount_usd', self.current_capital * 0.95))
                     fee = amount_to_invest * self.fee_rate
                     net_investment = amount_to_invest - fee
-                    amount = net_investment / current_price
+                    amount = net_investment / buy_price
                     
                     self.current_capital -= amount_to_invest
                     
                     position = Trade(
                         symbol=symbol,
-                        entry_price=current_price,
+                        entry_price=buy_price,
                         exit_price=None,
                         amount=amount,
                         side='LONG',
@@ -101,17 +104,17 @@ class BacktestEngine:
                     )
                 elif position.side == 'SHORT':
                     # Close SHORT, then open LONG (flip)
-                    self._close_position(position, current_price, current_time)
+                    self._close_position(position, buy_price, current_time)
                     position = None
                     # Open LONG immediately after flip
                     amount_to_invest = min(self.current_capital, signal.get('amount_usd', self.current_capital * 0.95))
                     fee = amount_to_invest * self.fee_rate
                     net_investment = amount_to_invest - fee
-                    amount = net_investment / current_price
+                    amount = net_investment / buy_price
                     self.current_capital -= amount_to_invest
                     position = Trade(
                         symbol=symbol,
-                        entry_price=current_price,
+                        entry_price=buy_price,
                         exit_price=None,
                         amount=amount,
                         side='LONG',
@@ -120,9 +123,11 @@ class BacktestEngine:
                     )
             
             elif signal['action'] == 'SELL':
+                sell_price = current_price * (1 - self.slippage_rate)
+                
                 if position and position.side == 'LONG':
                     # Close LONG
-                    self._close_position(position, current_price, current_time)
+                    self._close_position(position, sell_price, current_time)
                     position = None
                     
                 elif position is None:
@@ -130,13 +135,13 @@ class BacktestEngine:
                     amount_to_invest = min(self.current_capital, signal.get('amount_usd', self.current_capital * 0.95))
                     fee = amount_to_invest * self.fee_rate
                     net_investment = amount_to_invest - fee
-                    amount = net_investment / current_price
+                    amount = net_investment / sell_price
                     
                     self.current_capital -= amount_to_invest
                     
                     position = Trade(
                         symbol=symbol,
-                        entry_price=current_price,
+                        entry_price=sell_price,
                         exit_price=None,
                         amount=amount,
                         side='SHORT',
@@ -146,7 +151,12 @@ class BacktestEngine:
 
         # Close any open position at the end
         if position:
-            self._close_position(position, df.iloc[-1]['close'], df.iloc[-1]['timestamp'])
+            close_price = df.iloc[-1]['close']
+            if position.side == 'LONG':
+                close_price *= (1 - self.slippage_rate)
+            else:
+                close_price *= (1 + self.slippage_rate)
+            self._close_position(position, close_price, df.iloc[-1]['timestamp'])
             
         return self._generate_report()
 
@@ -174,21 +184,9 @@ class BacktestEngine:
             pnl = (trade.entry_price - price) * trade.amount
             initial_value = trade.amount * trade.entry_price
             
-            # For SHORT:
-            # We received Entry Value (Entry Price * Amount) when opening [Theoretically, simplified]
-            # But in this simple engine we deducted "Cost" (collateral) at start.
-            # To Close: We "Buy Back" at Exit Price.
-            # Cost to Close = Exit Price * Amount + Fee
-            # PnL = Initial Collateral + (Entry - Exit)*Amount - Fees
-            
-            # Simplified Capital Logic:
-            # Capital was reduced by 'amount_to_invest' at open.
-            # Return Capital = amount_to_invest + PnL
-            
-            # Logic:
-            # Entry: Sold 'amount' @ entry_price. Value = amount * entry_price.
-            # Exit: Bought 'amount' @ price. Cost = amount * price.
-            # GW PnL = (Entry - Exit) * Amount
+            # PnL logic for SHORT: Capital was reduced by investment on entry.
+            # Realized PnL = (Entry Price - Exit Price) * Amount - Exit Fee
+            # We return Investment + Realized PnL to Capital.
             
             gross_pnl = (trade.entry_price - price) * trade.amount
             

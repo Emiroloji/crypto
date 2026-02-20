@@ -1,9 +1,9 @@
 """Main trading bot orchestrator"""
 
 import asyncio
+import pandas as pd
 from typing import Dict, List
 from datetime import datetime, timezone
-import pandas as pd
 
 from src.config.settings import settings
 from src.data.exchange_client import binance_client
@@ -73,10 +73,31 @@ class TradingBot:
                 await trade_executor.update_capital()
                 self.capital = trade_executor.capital
                 
+                # Fetch global sentiment ONCE per loop to avoid rate limiting
+                try:
+                    from src.data.sentiment_client import sentiment_client
+                    from src.data.news_client import news_client
+                    
+                    fear_greed_data = sentiment_client.get_fear_greed_index()
+                    fg_value = fear_greed_data['value'] if fear_greed_data else 50
+                    
+                    news_items = news_client.get_latest_news("BTC", limit=20)
+                    news_sentiment = news_client.analyze_news_sentiment(news_items)
+                    news_score = news_sentiment['sentiment_score'] # -100 to +100
+                    
+                    # Convert news to 0-100 where 50 is neutral
+                    normalized_news = (news_score + 100) / 2
+                    
+                    # Global bullish sentiment (0-100)
+                    global_sentiment_score = (fg_value * 0.6) + (normalized_news * 0.4)
+                except Exception as e:
+                    main_logger.error(f"Error fetching global sentiment: {e}")
+                    global_sentiment_score = 50.0  # Neutral fallback
+
                 with get_db() as db:
                     # Process each trading pair
                     for symbol in self.trading_pairs:
-                        await self.process_symbol(symbol, db)
+                        await self.process_symbol(symbol, db, sentiment_score=global_sentiment_score)
                     
                     # Update open positions
                     await self.update_positions(db)
@@ -88,13 +109,14 @@ class TradingBot:
                 main_logger.error(f"Error in main loop: {e}")
                 await asyncio.sleep(60)
     
-    async def process_symbol(self, symbol: str, db=None):
+    async def process_symbol(self, symbol: str, db=None, sentiment_score: float = 50.0):
         """
         Process a single trading symbol
         
         Args:
             symbol: Trading pair to process
             db: Optional database session
+            sentiment_score: Global sentiment score (0-100)
         """
         try:
             main_logger.info(f"Processing {symbol}...")
@@ -118,12 +140,12 @@ class TradingBot:
             self.market_data_manager.save_order_book(order_book, db)
             
             # Generate signal
-            signal_data = signal_generator.generate_signal(
+            signal_data = await signal_generator.generate_signal(
                 symbol=symbol,
                 df=df,
                 order_book_data=order_book,
-                sentiment_score=0.0,  # TODO: Integrate sentiment
-                onchain_score=0.0,    # TODO: Integrate on-chain
+                sentiment_score=sentiment_score,
+                onchain_score=0.0,    # Default/Placeholder
             )
             
             main_logger.info(f"Signal generated for {symbol}: {signal_data is not None}")
