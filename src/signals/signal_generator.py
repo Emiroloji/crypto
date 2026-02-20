@@ -45,8 +45,7 @@ class SignalGenerator:
         symbol: str,
         df: pd.DataFrame,
         order_book_data: Optional[Dict] = None,
-        sentiment_score: float = 0.0,
-        onchain_score: float = 0.0
+        sentiment_score: float = 0.0
     ) -> Dict:
         """
         Generate comprehensive trading signal
@@ -56,12 +55,19 @@ class SignalGenerator:
             df: DataFrame with OHLCV data
             order_book_data: Optional order book data
             sentiment_score: Sentiment score (-100 to 100)
-            onchain_score: On-chain score (-100 to 100)
             
         Returns:
             Dictionary with signal information
         """
         try:
+            # Volume Filter: Avoid low-volume noise
+            if len(df) > 5:
+                avg_vol_5 = df["volume"].tail(5).mean()
+                avg_vol_history = df["volume"].mean()
+                if avg_vol_5 <= avg_vol_history:
+                    signal_logger.info(f"Volume too low for {symbol} (5-candle avg: {avg_vol_5:.2f} <= {avg_vol_history:.2f})")
+                    return None
+            
             # Get volatility regime first (needed for momentum)
             volatility_signals = get_volatility_signals(df)
             volatility_regime = volatility_signals['volatility_regime']
@@ -175,7 +181,6 @@ class SignalGenerator:
                 (orderbook_score / 100) * SIGNAL_WEIGHTS['order_book_imbalance'] +
                 (volatility_score / 100) * SIGNAL_WEIGHTS['volatility_regime'] +
                 (combined_sentiment / 100) * SIGNAL_WEIGHTS['sentiment_score'] +
-                (onchain_score / 100) * SIGNAL_WEIGHTS['onchain_data'] +
                 (advanced_score / 100) * SIGNAL_WEIGHTS['advanced_indicators'] +
                 (math_score / 100) * SIGNAL_WEIGHTS['mathematical_models']
             ) * 100
@@ -229,7 +234,6 @@ class SignalGenerator:
                 'orderbook_score': float(orderbook_score),
                 'volatility_score': float(volatility_score),
                 'sentiment_score': float(combined_sentiment),
-                'onchain_score': float(onchain_score),
                 'confidence_score': float(abs(confidence_score)),
                 'risk_reward_ratio': float(risk_reward_ratio),
                 'entry_price': float(entry_price),
@@ -315,7 +319,6 @@ class SignalGenerator:
                 orderbook_score=signal_data['orderbook_score'],
                 volatility_score=signal_data['volatility_score'],
                 sentiment_score=signal_data['sentiment_score'],
-                onchain_score=signal_data['onchain_score'],
                 confidence_score=signal_data['confidence_score'],
                 risk_reward_ratio=signal_data['risk_reward_ratio'],
                 entry_price=signal_data['entry_price'],

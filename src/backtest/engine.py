@@ -180,13 +180,7 @@ class BacktestEngine:
             realized_pnl = net_value - initial_value
             
         elif trade.side == 'SHORT':
-            # Profit = (Entry - Exit) * Amount
-            pnl = (trade.entry_price - price) * trade.amount
-            initial_value = trade.amount * trade.entry_price
-            
-            # PnL logic for SHORT: Capital was reduced by investment on entry.
-            # Realized PnL = (Entry Price - Exit Price) * Amount - Exit Fee
-            # We return Investment + Realized PnL to Capital.
+            # Realized PnL = (Entry - Exit) * Amount - Exit Fee. Returning Capital = Investment + PnL.
             
             gross_pnl = (trade.entry_price - price) * trade.amount
             

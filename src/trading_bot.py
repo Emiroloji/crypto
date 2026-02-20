@@ -78,10 +78,13 @@ class TradingBot:
                     from src.data.sentiment_client import sentiment_client
                     from src.data.news_client import news_client
                     
-                    fear_greed_data = sentiment_client.get_fear_greed_index()
+                    # Run synchronous requests in a separate thread to prevent blocking the event loop
+                    fear_greed_data = await asyncio.to_thread(sentiment_client.get_fear_greed_index)
                     fg_value = fear_greed_data['value'] if fear_greed_data else 50
                     
-                    news_items = news_client.get_latest_news("BTC", limit=20)
+                    news_items = await asyncio.to_thread(news_client.get_latest_news, "BTC", 20)
+                    
+                    # Sentiment analysis is CPU-bound but fast, run synchronously or also in thread
                     news_sentiment = news_client.analyze_news_sentiment(news_items)
                     news_score = news_sentiment['sentiment_score'] # -100 to +100
                     
@@ -145,7 +148,6 @@ class TradingBot:
                 df=df,
                 order_book_data=order_book,
                 sentiment_score=sentiment_score,
-                onchain_score=0.0,    # Default/Placeholder
             )
             
             main_logger.info(f"Signal generated for {symbol}: {signal_data is not None}")
@@ -240,6 +242,31 @@ class TradingBot:
                 await trade_executor.close_position(position.symbol, "stop_loss")
                 return
             
+            # Check partial take profit
+            if not getattr(position, 'partial_tp_hit', False):
+                # Calculate required current profit to hit partial TP
+                atr_distance = abs(position.take_profit - position.entry_price) / 5.0
+                partial_tp_distance = atr_distance * 2.0
+                
+                partial_tp_price = (
+                    position.entry_price + partial_tp_distance 
+                    if position.direction.value == 'LONG' 
+                    else position.entry_price - partial_tp_distance
+                )
+                
+                partial_hit = (
+                    current_price >= partial_tp_price if position.direction.value == 'LONG'
+                    else current_price <= partial_tp_price
+                )
+                
+                if partial_hit:
+                    main_logger.info(f"Partial Take Profit (ATR * 2) hit for {position.symbol}. Selling 50% and moving to Breakeven.")
+                    success = await trade_executor.close_partial_position(position.symbol, fraction=0.5)
+                    if success:
+                        position.partial_tp_hit = True
+                        position.stop_loss = position.entry_price  # Move to breakeven
+                        main_logger.info(f"Stop loss moved to breakeven ({position.entry_price}) for {position.symbol}")
+            
             # Check take profit
             if position.direction.value == 'LONG':
                 tp_hit = current_price >= position.take_profit
@@ -247,7 +274,7 @@ class TradingBot:
                 tp_hit = current_price <= position.take_profit
             
             if tp_hit:
-                main_logger.info(f"Take profit hit for {position.symbol}")
+                main_logger.info(f"Full Take Profit hit for {position.symbol}")
                 await trade_executor.close_position(position.symbol, "take_profit")
                 return
             

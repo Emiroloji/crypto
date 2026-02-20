@@ -35,13 +35,12 @@ INDICATOR_PARAMS: Dict[str, Any] = {
 
 # Signal Weights (must sum to 100%)
 SIGNAL_WEIGHTS: Dict[str, float] = {
-    "trend_confirmation": 0.20,      # 20%
+    "trend_confirmation": 0.30,      # 30% (increased from 20%)
     "momentum_alignment": 0.15,      # 15%
     "volume_confirmation": 0.15,     # 15%
     "order_book_imbalance": 0.10,    # 10%
     "volatility_regime": 0.10,       # 10%
     "sentiment_score": 0.10,         # 10%
-    "onchain_data": 0.10,            # 10%
     "advanced_indicators": 0.05,     # 5%  (Fib, ADX, StochRSI, OBV, VWAP, Ichimoku)
     "mathematical_models": 0.05,     # 5%  (Regression, S/R, Correlation, Vol Forecast)
 }

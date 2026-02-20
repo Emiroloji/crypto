@@ -115,6 +115,7 @@ class Position(Base):
     stop_loss = Column(Float, nullable=False)
     take_profit = Column(Float, nullable=False)
     trailing_stop = Column(Float)
+    partial_tp_hit = Column(Boolean, default=False)
     opened_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -135,7 +136,6 @@ class Signal(Base):
     orderbook_score = Column(Float, nullable=False)
     volatility_score = Column(Float, nullable=False)
     sentiment_score = Column(Float, nullable=False)
-    onchain_score = Column(Float, nullable=False)
     
     # Overall
     confidence_score = Column(Float, nullable=False)

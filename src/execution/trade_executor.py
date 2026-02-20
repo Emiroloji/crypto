@@ -296,6 +296,109 @@ class TradeExecutor:
             execution_logger.error(f"Error closing position: {e}")
             return False
 
+    async def close_partial_position(
+        self,
+        symbol: str,
+        fraction: float = 0.5,
+        reason: str = "partial_take_profit"
+    ) -> bool:
+        """
+        Close a fraction of an open position
+        
+        Args:
+            symbol: Trading symbol
+            fraction: Fraction of position to close (e.g., 0.5 for 50%)
+            reason: Reason for closing
+            
+        Returns:
+            Success status
+        """
+        if not (0 < fraction < 1):
+            execution_logger.error(f"Invalid fraction {fraction} for partial close on {symbol}")
+            return False
+            
+        try:
+            with get_db() as db:
+                # Get position
+                position = db.query(Position).filter(
+                    Position.symbol == symbol
+                ).first()
+                
+                if not position:
+                    execution_logger.warning(f"No position found for {symbol} to partially close")
+                    return False
+                
+                # Determine order side (opposite of position)
+                side = 'sell' if position.direction == TradeDirection.LONG else 'buy'
+                
+                amount_to_close = position.position_size * fraction
+                
+                # Place closing order
+                order = await self.exchange.place_order(
+                    symbol=symbol,
+                    side=side,
+                    order_type='market',
+                    amount=amount_to_close
+                )
+                
+                exit_price = order.get('price', position.current_price)
+                fee_rate = settings.taker_fee_rate
+                
+                # Calculate fees for the closed portion
+                entry_fee = position.entry_price * amount_to_close * fee_rate
+                exit_fee = exit_price * amount_to_close * fee_rate
+                total_fees = entry_fee + exit_fee
+
+                # Calculate P&L for the closed portion
+                if position.direction == TradeDirection.LONG:
+                    gross_pnl = (exit_price - position.entry_price) * amount_to_close
+                else:
+                    gross_pnl = (position.entry_price - exit_price) * amount_to_close
+
+                pnl = gross_pnl - total_fees
+                pnl_percent = (pnl / (position.entry_price * amount_to_close)) * 100
+                
+                # Create a new trade record for the partial close
+                trade_record = db.query(Trade).filter(
+                    Trade.symbol == symbol,
+                    Trade.status == TradeStatus.OPEN
+                ).first()
+                
+                # We do not close the original Trade entry if we want to track it entirely or 
+                # we just log a separate CLOSED Trade record representing this partial exit.
+                # Here we create a new Trade just to record the partial PnL.
+                if trade_record:
+                    partial_trade = Trade(
+                        symbol=symbol,
+                        direction=position.direction,
+                        status=TradeStatus.CLOSED,
+                        entry_timestamp=trade_record.entry_timestamp,
+                        entry_price=position.entry_price,
+                        position_size=amount_to_close,
+                        leverage=position.leverage,
+                        exit_timestamp=datetime.now(timezone.utc),
+                        exit_price=exit_price,
+                        pnl=pnl,
+                        pnl_percent=pnl_percent,
+                        fees=total_fees,
+                        notes=f"Partial Close ({fraction*100}%): {reason}"
+                    )
+                    db.add(partial_trade)
+                
+                # Reduce position size
+                position.position_size -= amount_to_close
+                db.commit()
+                
+                execution_logger.info(
+                    f"Partial Position closed (50%): {symbol} P&L: ${pnl:.2f} ({pnl_percent:.2f}%) Fee: ${exit_fee:.2f}"
+                )
+                
+                return True
+                
+        except Exception as e:
+            execution_logger.error(f"Error partially closing position: {e}")
+            return False
+
 
 # Global trade executor instance
 trade_executor = TradeExecutor()
