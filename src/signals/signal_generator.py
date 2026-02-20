@@ -44,6 +44,7 @@ class SignalGenerator:
         self,
         symbol: str,
         df: pd.DataFrame,
+        macro_df: Optional[pd.DataFrame] = None,
         order_book_data: Optional[Dict] = None,
         sentiment_score: float = 0.0
     ) -> Dict:
@@ -52,7 +53,8 @@ class SignalGenerator:
         
         Args:
             symbol: Trading pair
-            df: DataFrame with OHLCV data
+            df: DataFrame with OHLCV data (e.g., 5m timeframe)
+            macro_df: DataFrame with macro OHLCV data (e.g., 1h timeframe)
             order_book_data: Optional order book data
             sentiment_score: Sentiment score (-100 to 100)
             
@@ -60,12 +62,12 @@ class SignalGenerator:
             Dictionary with signal information
         """
         try:
-            # Volume Filter: Avoid low-volume noise
+            # Volume Filter: Avoid low-volume noise with 30% tolerance margin
             if len(df) > 5:
                 avg_vol_5 = df["volume"].tail(5).mean()
                 avg_vol_history = df["volume"].mean()
-                if avg_vol_5 <= avg_vol_history:
-                    signal_logger.info(f"Volume too low for {symbol} (5-candle avg: {avg_vol_5:.2f} <= {avg_vol_history:.2f})")
+                if avg_vol_5 <= (avg_vol_history * 0.7):
+                    signal_logger.info(f"Volume too low for {symbol} (5-candle avg: {avg_vol_5:.2f} <= history: {avg_vol_history * 0.7:.2f})")
                     return None
             
             # Get volatility regime first (needed for momentum)
@@ -131,6 +133,21 @@ class SignalGenerator:
             ) * 100
             
             prelim_direction = 'LONG' if prelim_confidence > 0 else 'SHORT'
+            
+            # --- 🚀 Multi-Timeframe Analysis (MTF) ---
+            # Don't trade against the macro trend!
+            if macro_df is not None and not macro_df.empty:
+                macro_trend_signals = get_trend_signals(macro_df)
+                macro_trend_score = macro_trend_signals['trend_score']
+                
+                if prelim_direction == 'LONG' and macro_trend_score < -30.0:
+                    signal_logger.info(f"MTF Reject {symbol}: 5m is LONG but 1h Macro Trend is strongly SHORT ({macro_trend_score})")
+                    return None
+                    
+                if prelim_direction == 'SHORT' and macro_trend_score > 30.0:
+                    signal_logger.info(f"MTF Reject {symbol}: 5m is SHORT but 1h Macro Trend is strongly LONG ({macro_trend_score})")
+                    return None
+            # ----------------------------------------
             
             # Calculate advanced indicator scores
             adx_score = calculate_adx_score(adx_value, di_plus_value, di_minus_value, prelim_direction)

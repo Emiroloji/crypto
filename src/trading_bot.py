@@ -138,6 +138,17 @@ class TradingBot:
             # Save to database
             self.market_data_manager.save_ohlcv(df, db)
             
+            # Fetch macro data for MTF analysis (1h timeframe)
+            macro_df = await binance_client.fetch_ohlcv(
+                symbol,
+                timeframe='1h',
+                limit=100
+            )
+            
+            # Save to database (optional, can just use memory)
+            if not macro_df.empty:
+                self.market_data_manager.save_ohlcv(macro_df, db)
+            
             # Fetch order book
             order_book = await binance_client.fetch_order_book(symbol, limit=20)
             self.market_data_manager.save_order_book(order_book, db)
@@ -146,6 +157,7 @@ class TradingBot:
             signal_data = await signal_generator.generate_signal(
                 symbol=symbol,
                 df=df,
+                macro_df=macro_df,
                 order_book_data=order_book,
                 sentiment_score=sentiment_score,
             )
