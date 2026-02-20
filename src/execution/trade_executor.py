@@ -165,7 +165,11 @@ class TradeExecutor:
         
         def _save(session):
             signal_id = signal_data.get('signal_id')
-            entry_price = order.get('price', signal_data['entry_price'])
+            # Fix: If order['price'] is None (common in some paper trading stubs), fallback to signal_data['entry_price']
+            entry_price = order.get('price')
+            if entry_price is None:
+                entry_price = signal_data['entry_price']
+                
             now = datetime.now(timezone.utc)
 
             trade = Trade(
