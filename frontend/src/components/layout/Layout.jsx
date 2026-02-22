@@ -25,7 +25,7 @@ export default function Layout() {
         // Setup WebSocket connection
         const wsUrl = process.env.NODE_ENV === 'production'
             ? `ws://${window.location.host}/ws`
-            : 'ws://localhost:8000/ws';
+            : 'ws://127.0.0.1:8000/ws';
 
         let ws;
         let reconnectTimeout;

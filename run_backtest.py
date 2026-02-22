@@ -20,11 +20,8 @@ from src.signals.signal_generator import signal_generator
 
 def run_strategy(df, current_index):
     """Bridge function for the backtest engine"""
-    # For backtesting, we strictly use the past data slice up to current index
     current_df = df.iloc[:current_index+1].copy()
     
-    # We must use synchronous call or run in an event loop here, 
-    # but since generate_signal is async, we wrap it
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
@@ -35,19 +32,24 @@ def run_strategy(df, current_index):
         signal_generator.generate_signal(
             symbol=df.iloc[0]['symbol'],
             df=current_df,
-            sentiment_score=50.0  # Neutral sentiment for backtest by default
+            sentiment_score=50.0 
         )
     )
     
+    # 🌟 İŞTE HAYAT KURTARAN DÜZELTME BURADA 🌟
     if signal_data and 'direction' in signal_data:
-        direction = signal_data['direction'].value if hasattr(signal_data['direction'], 'value') else signal_data['direction']
-        if direction == 'LONG':
-            return {'action': 'BUY'}
-        elif direction == 'SHORT':
-            return {'action': 'SELL'}
+        confidence = signal_data.get('confidence_score', 0.0)
+        
+        # Sadece güven skoru 85 ve üzeriyse işleme gir!
+        if confidence >= 85.0:
+            direction = signal_data['direction'].value if hasattr(signal_data['direction'], 'value') else signal_data['direction']
+            if direction == 'LONG':
+                return {'action': 'BUY'}
+            elif direction == 'SHORT':
+                return {'action': 'SELL'}
             
     return {'action': 'HOLD'}
-
+    
 async def main():
     parser = argparse.ArgumentParser(description="Emiroloji Backtest CLI")
     parser.add_argument("--symbol", type=str, default="BTC/USDT", help="Trading pair symbol (e.g., BTC/USDT)")

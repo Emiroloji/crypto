@@ -256,7 +256,10 @@ class TradeExecutor:
                     amount=position.position_size
                 )
                 
-                exit_price = order.get('price', position.current_price)
+                exit_price = order.get('price')
+                if exit_price is None:
+                    exit_price = position.current_price
+                    
                 fee_rate = settings.taker_fee_rate
                 entry_fee = position.entry_price * position.position_size * fee_rate
                 exit_fee = exit_price * position.position_size * fee_rate
@@ -345,7 +348,10 @@ class TradeExecutor:
                     amount=amount_to_close
                 )
                 
-                exit_price = order.get('price', position.current_price)
+                exit_price = order.get('price')
+                if exit_price is None:
+                    exit_price = position.current_price
+                    
                 fee_rate = settings.taker_fee_rate
                 
                 # Calculate fees for the closed portion
@@ -382,6 +388,8 @@ class TradeExecutor:
                         leverage=position.leverage,
                         exit_timestamp=datetime.now(timezone.utc),
                         exit_price=exit_price,
+                        stop_loss=position.stop_loss,
+                        take_profit=position.take_profit,
                         pnl=pnl,
                         pnl_percent=pnl_percent,
                         fees=total_fees,

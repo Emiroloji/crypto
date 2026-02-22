@@ -94,20 +94,25 @@ class TradingBot:
                     last_sentiment_update = datetime.min.replace(tzinfo=timezone.utc)
                     last_optimization = datetime.now(timezone.utc)
                     global_sentiment_score = 50.0
+                    last_capital_update = 0.0
+                    last_position_update = 0.0
                     
                     while self.running:
                         try:
-                            # 1. Update Capital
-                            old_capital = self.capital
-                            await trade_executor.update_capital()
-                            self.capital = trade_executor.capital
-                            
-                            if old_capital != self.capital:
-                                from src.api.main import manager as ws_manager
-                                await ws_manager.broadcast({
-                                    "type": "capital_update",
-                                    "data": {"capital": self.capital}
-                                })
+                            now_ts = datetime.now(timezone.utc).timestamp()
+                            # 1. Update Capital (Throttle to 5 seconds)
+                            if now_ts - last_capital_update > 5:
+                                old_capital = self.capital
+                                await trade_executor.update_capital()
+                                self.capital = trade_executor.capital
+                                
+                                if old_capital != self.capital:
+                                    from src.api.main import manager as ws_manager
+                                    await ws_manager.broadcast({
+                                        "type": "capital_update",
+                                        "data": {"capital": self.capital}
+                                    })
+                                last_capital_update = now_ts
                                 
                             # 2. Update Sentiment (Throttle to once every 15 mins)
                             now = datetime.now(timezone.utc)
@@ -143,9 +148,14 @@ class TradingBot:
                                 except Exception as e:
                                     main_logger.error(f"Error during Walk-Forward Optimization: {e}")
                             
-                            # 3. Update Open Positions constantly regardless of new candles
-                            with get_db() as db:
-                                await self.update_positions(db)
+                            # 3. Update Open Positions (Throttle to 2 seconds)
+                            if now_ts - last_position_update > 2.0:
+                                with get_db() as db:
+                                    await self.update_positions(db)
+                                last_position_update = now_ts
+                                
+                            # Adding tiny sleep to let uvicorn breathe
+                            await asyncio.sleep(0.01)
                                 
                             # 4. Wait for WebSocket message (timeout allows position updates to continue)
                             try:
@@ -335,7 +345,7 @@ class TradingBot:
                 return
             
             # Update position price
-            position.current_price = current_price
+            position.current_price = float(current_price)
             
             # Calculate unrealized P&L
             if position.direction.value == 'LONG':
@@ -343,7 +353,7 @@ class TradingBot:
             else:
                 pnl = (position.entry_price - current_price) * position.position_size
             
-            position.unrealized_pnl = pnl
+            position.unrealized_pnl = float(pnl)
             
             # Check stop loss
             stop_hit = stop_loss_manager.check_stop_hit(
@@ -407,7 +417,7 @@ class TradingBot:
                 )
                 
                 if stop_update['stop_updated']:
-                    position.stop_loss = stop_update['new_stop']
+                    position.stop_loss = float(stop_update['new_stop'])
                     main_logger.info(
                         f"Stop updated for {position.symbol}: {stop_update['new_stop']:.2f}"
                     )

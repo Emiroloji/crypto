@@ -44,17 +44,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add CORS middleware — allow React dev server + production
-_allowed_origins = getattr(settings, 'allowed_origins', [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://localhost:8000",
-])
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_allowed_origins,
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
