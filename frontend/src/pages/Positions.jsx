@@ -28,7 +28,7 @@ function StatusBadge({ status }) {
 }
 
 export default function Positions() {
-    const { tick } = useOutletContext();
+    const { tick, wsData } = useOutletContext();
     const [positions, setPositions] = useState([]);
     const [trades, setTrades] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -55,6 +55,23 @@ export default function Positions() {
         setLoading(true);
         fetchData();
     }, [tick]);
+
+    // Handle real-time position updates
+    useEffect(() => {
+        if (!wsData) return;
+
+        if (wsData.type === 'positions_update') {
+            setPositions(prev => {
+                const map = new Map(prev.map(p => [p.symbol, p]));
+                wsData.data.forEach(update => {
+                    if (map.has(update.symbol)) {
+                        map.set(update.symbol, { ...map.get(update.symbol), ...update });
+                    }
+                });
+                return Array.from(map.values());
+            });
+        }
+    }, [wsData]);
 
     const handleClose = async (symbol) => {
         setClosing(symbol);

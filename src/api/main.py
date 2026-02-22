@@ -1,7 +1,9 @@
 """FastAPI application"""
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
+import json
+import asyncio
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -56,6 +58,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        if not self.active_connections:
+            return
+            
+        json_msg = json.dumps(message)
+        for connection in self.active_connections:
+            try:
+                await connection.send_text(json_msg)
+            except Exception:
+                pass # Client disconnected or error
+
+manager = ConnectionManager()
 
 # Pydantic models for API
 class SystemStatus(BaseModel):
@@ -478,6 +505,41 @@ async def update_config(update: ConfigUpdate):
 
     return {"message": "Ayarlar güncellendi", "updated": updated}
 
+
+# Real-time WebSockets
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """Real-time trading system updates"""
+    await manager.connect(websocket)
+    try:
+        # Send initial state
+        with get_db() as db:
+            open_positions = db.query(Position).count()
+        
+        await websocket.send_text(json.dumps({
+            "type": "system_status",
+            "data": {
+                "running": trading_bot.running,
+                "capital": trading_bot.capital,
+                "open_positions": open_positions
+            }
+        }))
+        
+        while True:
+            # Client can ping us to keep connection alive or send commands
+            data = await websocket.receive_text()
+            try:
+                msg = json.loads(data)
+                if msg.get("type") == "ping":
+                    await websocket.send_text(json.dumps({"type": "pong"}))
+            except json.JSONDecodeError:
+                pass
+                
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception as e:
+        main_logger.error(f"WebSocket error: {e}")
+        manager.disconnect(websocket)
 
 if __name__ == "__main__":
     import uvicorn

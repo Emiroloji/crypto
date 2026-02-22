@@ -36,7 +36,7 @@ function DirectionBadge({ dir }) {
 }
 
 export default function Dashboard() {
-    const { status, tick } = useOutletContext();
+    const { status, tick, wsData } = useOutletContext();
     const [signals, setSignals] = useState([]);
     const [positions, setPositions] = useState([]);
     const [summary, setSummary] = useState(null);
@@ -73,6 +73,26 @@ export default function Dashboard() {
         fetchAll();
         return () => { cancelled = true; };
     }, [tick]);
+
+    // Handle incoming realtime signals
+    useEffect(() => {
+        if (!wsData) return;
+
+        if (wsData.type === 'positions_update') {
+            setPositions(prev => {
+                const map = new Map(prev.map(p => [p.symbol, p]));
+                wsData.data.forEach(update => {
+                    if (map.has(update.symbol)) {
+                        map.set(update.symbol, { ...map.get(update.symbol), ...update });
+                    }
+                });
+                return Array.from(map.values());
+            });
+        } else if (wsData.type === 'trade_executed') {
+            // A new trade execution usually implies a signal was actued upon, refreshing signals can be helpful
+            // or we could optimistically update if we had enough data
+        }
+    }, [wsData]);
 
 
     const totalPnl = positions.reduce((a, p) => a + (p.unrealized_pnl ?? 0), 0);

@@ -2,8 +2,9 @@
 
 import asyncio
 from typing import Optional
-from telegram import Bot
+from telegram import Bot, Update
 from telegram.error import TelegramError
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 from src.config.settings import settings
 from src.utils.logger import main_logger
@@ -13,13 +14,93 @@ class AlertManager:
     """Manage alerts via Telegram"""
     
     def __init__(self):
-        self.bot: Optional[Bot] = None
+        self.bot = None
+        self.app = None
         
         if settings.telegram_bot_token:
             try:
                 self.bot = Bot(token=settings.telegram_bot_token)
+                self._setup_command_handlers()
             except Exception as e:
                 main_logger.error(f"Failed to initialize Telegram bot: {e}")
+                
+    def _setup_command_handlers(self):
+        """Build and configure the Application with command handlers"""
+        self.app = ApplicationBuilder().token(settings.telegram_bot_token).build()
+        self.app.add_handler(CommandHandler("status", self._cmd_status))
+        self.app.add_handler(CommandHandler("close", self._cmd_close))
+        
+        # We start the bot polling in a background task
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        loop.create_task(self._start_polling())
+        
+    async def _start_polling(self):
+        """Start long polling in background"""
+        if self.app:
+            await self.app.initialize()
+            await self.app.start()
+            await self.app.updater.start_polling()
+            main_logger.info("Telegram bot command polling started.")
+            
+    async def _cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /status command"""
+        # Security check: only allow configured chat id
+        if str(update.effective_chat.id) != str(self.chat_id):
+            return
+            
+        from src.trading_bot import trading_bot
+        from src.database.connection import get_db
+        from src.database.models import Position
+        
+        try:
+            with get_db() as db:
+                positions = db.query(Position).all()
+                pos_count = len(positions)
+                
+            msg = (
+                f"🤖 *Emiroloji Bot Status*\n"
+                f"Running: {'✅ Yes' if trading_bot.running else '❌ No'}\n"
+                f"Capital: ${trading_bot.capital:.2f}\n"
+                f"Open Positions: {pos_count}\n"
+            )
+            
+            if pos_count > 0:
+                msg += "\n*Positions:*\n"
+                for p in positions:
+                    msg += f"- {p.symbol} ({p.direction.value}) PnL: ${p.unrealized_pnl:.2f}\n"
+                    
+            await update.message.reply_text(msg, parse_mode="Markdown")
+        except Exception as e:
+            await update.message.reply_text(f"Error getting status: {e}")
+
+    async def _cmd_close(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /close command"""
+        if str(update.effective_chat.id) != str(self.chat_id):
+            return
+            
+        if not context.args:
+            await update.message.reply_text("Usage: /close <COIN> (e.g., /close BTC/USDT)")
+            return
+            
+        symbol = context.args[0].upper()
+        if not symbol.endswith("USDT") and "/" not in symbol:
+            symbol = f"{symbol}/USDT"
+            
+        from src.execution.trade_executor import trade_executor
+        
+        try:
+            success = await trade_executor.close_position(symbol, "manual")
+            if success:
+                await update.message.reply_text(f"✅ Successfully closed position for {symbol}")
+            else:
+                await update.message.reply_text(f"❌ Failed to close or no active position for {symbol}")
+        except Exception as e:
+            await update.message.reply_text(f"Error closing position: {e}")
     
     @property
     def chat_id(self) -> Optional[str]:

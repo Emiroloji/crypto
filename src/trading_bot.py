@@ -17,6 +17,8 @@ from src.database.connection import get_db
 from src.database.models import Position
 from src.utils.logger import main_logger
 from src.utils.alerts import alert_manager
+import json
+import websockets
 
 
 class TradingBot:
@@ -66,51 +68,120 @@ class TradingBot:
         )
     
     async def run_loop(self):
-        """Main trading loop"""
+        """Main trading loop built around Binance WebSockets"""
+        import traceback
+        
         while self.running:
             try:
-                # Update capital
-                await trade_executor.update_capital()
-                self.capital = trade_executor.capital
-                
-                # Fetch global sentiment ONCE per loop to avoid rate limiting
-                try:
-                    from src.data.sentiment_client import sentiment_client
-                    from src.data.news_client import news_client
-                    
-                    # Run synchronous requests in a separate thread to prevent blocking the event loop
-                    fear_greed_data = await asyncio.to_thread(sentiment_client.get_fear_greed_index)
-                    fg_value = fear_greed_data['value'] if fear_greed_data else 50
-                    
-                    news_items = await asyncio.to_thread(news_client.get_latest_news, "BTC", 20)
-                    
-                    # Sentiment analysis is CPU-bound but fast, run synchronously or also in thread
-                    news_sentiment = news_client.analyze_news_sentiment(news_items)
-                    news_score = news_sentiment['sentiment_score'] # -100 to +100
-                    
-                    # Convert news to 0-100 where 50 is neutral
-                    normalized_news = (news_score + 100) / 2
-                    
-                    # Global bullish sentiment (0-100)
-                    global_sentiment_score = (fg_value * 0.6) + (normalized_news * 0.4)
-                except Exception as e:
-                    main_logger.error(f"Error fetching global sentiment: {e}")
-                    global_sentiment_score = 50.0  # Neutral fallback
+                # Build streams string formatted as `<symbol>@kline_<interval>`
+                # Binance WebSocket expects lowercase symbols (e.g., btcusdt)
+                streams = []
+                # Assuming 5m is the primary timeframe we look for signal triggers on close
+                for symbol in self.trading_pairs:
+                    ws_symbol = symbol.replace("/", "").lower()
+                    streams.append(f"{ws_symbol}@kline_5m")
 
-                with get_db() as db:
-                    # Process each trading pair
-                    for symbol in self.trading_pairs:
-                        await self.process_symbol(symbol, db, sentiment_score=global_sentiment_score)
+                stream_url = f"wss://fstream.binance.com/stream?streams={'/'.join(streams)}"
+                if settings.binance_testnet and not settings.is_paper_trading():
+                    stream_url = f"wss://stream.binancefuture.com/stream?streams={'/'.join(streams)}"
+
+                main_logger.info(f"Connecting to Binance WebSocket: {stream_url}")
+                
+                async with websockets.connect(stream_url, ping_interval=20, ping_timeout=10) as ws:
+                    main_logger.info("✅ Connected to Binance WebSocket")
                     
-                    # Update open positions
-                    await self.update_positions(db)
-                
-                # Wait before next iteration
-                await asyncio.sleep(60)  # Check every minute
-                
+                    last_sentiment_update = datetime.min.replace(tzinfo=timezone.utc)
+                    last_optimization = datetime.now(timezone.utc)
+                    global_sentiment_score = 50.0
+                    
+                    while self.running:
+                        try:
+                            # 1. Update Capital
+                            old_capital = self.capital
+                            await trade_executor.update_capital()
+                            self.capital = trade_executor.capital
+                            
+                            if old_capital != self.capital:
+                                from src.api.main import manager as ws_manager
+                                await ws_manager.broadcast({
+                                    "type": "capital_update",
+                                    "data": {"capital": self.capital}
+                                })
+                                
+                            # 2. Update Sentiment (Throttle to once every 15 mins)
+                            now = datetime.now(timezone.utc)
+                            if (now - last_sentiment_update).total_seconds() > 900:
+                                try:
+                                    from src.data.sentiment_client import sentiment_client
+                                    from src.data.news_client import news_client
+                                    
+                                    fear_greed_data = await asyncio.to_thread(sentiment_client.get_fear_greed_index)
+                                    fg_value = fear_greed_data['value'] if fear_greed_data else 50
+                                    news_items = await asyncio.to_thread(news_client.get_latest_news, "BTC", 20)
+                                    news_sentiment = news_client.analyze_news_sentiment(news_items)
+                                    news_score = news_sentiment['sentiment_score']
+                                    normalized_news = (news_score + 100) / 2
+                                    global_sentiment_score = (fg_value * 0.6) + (normalized_news * 0.4)
+                                    last_sentiment_update = now
+                                except Exception as e:
+                                    main_logger.error(f"Error fetching global sentiment: {e}")
+                                    
+                            # 2.5 Walk-Forward Optimization (Run once every 7 days)
+                            if (now - last_optimization).total_seconds() > 7 * 24 * 3600:
+                                try:
+                                    from src.backtest.optimizer import optimizer
+                                    from src.config import constants
+                                    
+                                    main_logger.info("🔄 Running scheduled Walk-Forward Optimization...")
+                                    # Optimize for the first trading pair as a proxy, or loop through all
+                                    if self.trading_pairs:
+                                        best_weights = await optimizer.optimize(self.trading_pairs[0], timeframe='5m', days_lookback=7)
+                                        constants.SIGNAL_WEIGHTS.update(best_weights)
+                                        main_logger.info("✅ Walk-Forward Optimization applied new weights.")
+                                    last_optimization = now
+                                except Exception as e:
+                                    main_logger.error(f"Error during Walk-Forward Optimization: {e}")
+                            
+                            # 3. Update Open Positions constantly regardless of new candles
+                            with get_db() as db:
+                                await self.update_positions(db)
+                                
+                            # 4. Wait for WebSocket message (timeout allows position updates to continue)
+                            try:
+                                msg = await asyncio.wait_for(ws.recv(), timeout=2.0)
+                                data = json.loads(msg)
+                                
+                                if "data" in data and "k" in data["data"]:
+                                    kline = data["data"]["k"]
+                                    symbol_raw = kline["s"] # e.g. BTCUSDT
+                                    is_closed = kline["x"]
+                                    
+                                    # Match raw binance symbol to our internal format (BTC/USDT)
+                                    internal_symbol = None
+                                    for sp in self.trading_pairs:
+                                        if sp.replace("/", "").upper() == symbol_raw.upper():
+                                            internal_symbol = sp
+                                            break
+                                            
+                                    if internal_symbol and is_closed:
+                                        main_logger.info(f"🕯️ 5m Candle closed for {internal_symbol}. Processing signals...")
+                                        with get_db() as db:
+                                            await self.process_symbol(internal_symbol, db, sentiment_score=global_sentiment_score)
+                                            
+                            except asyncio.TimeoutError:
+                                # Normal timeout just to allow the loop to run position updates
+                                continue
+                                
+                        except websockets.exceptions.ConnectionClosed:
+                            main_logger.warning("WebSocket connection closed. Reconnecting...")
+                            break # Break inner loop, outer loop will reconnect
+                        except Exception as e:
+                            main_logger.error(f"Error in inner websocket loop: {e}\n{traceback.format_exc()}")
+                            await asyncio.sleep(5)
+                            
             except Exception as e:
-                main_logger.error(f"Error in main loop: {e}")
-                await asyncio.sleep(60)
+                main_logger.error(f"Error in outer websocket connection: {e}\n{traceback.format_exc()}")
+                await asyncio.sleep(10)
     
     async def process_symbol(self, symbol: str, db=None, sentiment_score: float = 50.0):
         """
@@ -195,6 +266,15 @@ class TradingBot:
             
             if trade_id:
                 main_logger.info(f"Trade executed: ID {trade_id}")
+                from src.api.main import manager as ws_manager
+                await ws_manager.broadcast({
+                    "type": "trade_executed",
+                    "data": {
+                        "symbol": symbol,
+                        "direction": signal_data['direction'].value,
+                        "trade_id": trade_id
+                    }
+                })
             
         except Exception as e:
             main_logger.error(f"Error processing {symbol}: {e}")
@@ -202,16 +282,35 @@ class TradingBot:
     async def update_positions(self, db=None):
         """Update all open positions"""
         try:
+            positions_data = []
+            
             # Use provided db or new session
             if db:
                 positions = db.query(Position).all()
                 for position in positions:
                     await self.update_single_position(position, db)
+                    positions_data.append({
+                        "symbol": position.symbol,
+                        "unrealized_pnl": position.unrealized_pnl,
+                        "current_price": position.current_price
+                    })
             else:
                 with get_db() as new_db:
                     positions = new_db.query(Position).all()
                     for position in positions:
                         await self.update_single_position(position, new_db)
+                        positions_data.append({
+                            "symbol": position.symbol,
+                            "unrealized_pnl": position.unrealized_pnl,
+                            "current_price": position.current_price
+                        })
+                        
+            if positions_data:
+                from src.api.main import manager as ws_manager
+                await ws_manager.broadcast({
+                    "type": "positions_update",
+                    "data": positions_data
+                })
                     
         except Exception as e:
             main_logger.error(f"Error updating positions: {e}")
