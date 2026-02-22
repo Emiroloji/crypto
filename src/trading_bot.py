@@ -28,6 +28,7 @@ class TradingBot:
         self.running = False
         self.capital = 0.0
         self.market_data_manager = MarketDataManager()
+        self.live_prices = {}  # In-memory cache for real-time prices from WebSocket
     
     @property
     def trading_pairs(self) -> List[str]:
@@ -161,10 +162,11 @@ class TradingBot:
                                     for sp in self.trading_pairs:
                                         if sp.replace("/", "").upper() == symbol_raw.upper():
                                             internal_symbol = sp
-                                            break
-                                            
-                                    if internal_symbol and is_closed:
-                                        main_logger.info(f"🕯️ 5m Candle closed for {internal_symbol}. Processing signals...")
+                                    if internal_symbol:
+                                        self.live_prices[internal_symbol] = float(kline["c"])
+                                        
+                                        if is_closed:
+                                            main_logger.info(f"🕯️ 5m Candle closed for {internal_symbol}. Processing signals...")
                                         with get_db() as db:
                                             await self.process_symbol(internal_symbol, db, sentiment_score=global_sentiment_score)
                                             
@@ -324,8 +326,10 @@ class TradingBot:
             db: Optional database session (reuse from caller to avoid nested sessions)
         """
         try:
-            # Fetch current price
-            current_price = self.market_data_manager.get_latest_price(position.symbol)
+            # First try memory cache (updated by WebSocket), then fallback to DB
+            current_price = self.live_prices.get(position.symbol)
+            if not current_price:
+                current_price = self.market_data_manager.get_latest_price(position.symbol)
             
             if not current_price:
                 return

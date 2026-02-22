@@ -7,6 +7,7 @@ Usage: python run_backtest.py --symbol BTC/USDT --days 7 --timeframe 5m
 import sys
 import argparse
 import asyncio
+import functools
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -90,7 +91,9 @@ async def main():
         print("[*] Running Backtest Engine... (This may take a while depending on signal generation complexity)")
         
         engine = BacktestEngine(initial_capital=args.capital)
-        report = engine.run(data=df, strategy_fn=run_strategy, symbol=args.symbol)
+        report = await asyncio.to_thread(
+            functools.partial(engine.run, data=df, strategy_fn=run_strategy, symbol=args.symbol)
+        )
         
         print("\n" + "="*40)
         print("📊 BACKTEST RESULTS")

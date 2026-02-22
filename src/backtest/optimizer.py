@@ -4,6 +4,7 @@ Dynamically finds the best SIGNAL_WEIGHTS based on recent historical data.
 """
 
 import asyncio
+import functools
 import itertools
 from typing import Dict, List, Tuple
 import pandas as pd
@@ -130,7 +131,9 @@ class WalkForwardOptimizer:
                 engine = BacktestEngine(initial_capital=10000.0)
                 strategy_fn = self._create_strategy_fn(weights)
                 
-                report = engine.run(data=df, strategy_fn=strategy_fn, symbol=symbol)
+                report = await asyncio.to_thread(
+                    functools.partial(engine.run, data=df, strategy_fn=strategy_fn, symbol=symbol)
+                )
                 
                 metric_value = report.get('total_pnl', 0.0) # default target
                 main_logger.info(f"Result #{i+1} => PnL: ${metric_value:.2f}, Win Rate: {report.get('win_rate', 0):.1f}%")
